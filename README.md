@@ -38,9 +38,50 @@ Open [http://127.0.0.1:43123](http://127.0.0.1:43123). The dev server serves the
 3. Copy the code. Open more browser tabs, join with that code, and give each tab a name. Each tab is its own player.
 4. Pick sides so the teams are legal, then **Start the round**.
 5. Arrow keys, the N/E/S/W pad, or a tap on the map moves you. **Drop** places you on the spot you tap. Hunters can use **Drop and tag** on a ping to step within range and ask that runner to confirm.
-6. Tag, confirm, and play to the clock. **Practice with bots** fills a lobby if you are on your own.
+6. Tag, confirm, and play to the clock. **Practice on this phone** fills a lobby with bots and does not need the server.
 
 A phone’s real GPS is used when on-screen movement is off. Allow location when the round starts. The browser only shares it while the tab is open.
+
+**Practice on this phone** runs the whole round in the app. It does not open a socket. Host and join still need a game server.
+
+### Game server address
+
+The first screen has a **Game server** field.
+
+- In a browser, leave it blank to use the site you are on (`/ws` on that host).
+- On the Android app, host and join need an address the phone can reach, such as `https://skulk.example.com` or `192.168.1.20:43123`.
+- `https://` becomes `wss://`, and a bare host gets `ws://` and the `/ws` path.
+- Practice on this phone ignores the field.
+
+This environment has no public host account, so the APK is not pointed at a live server. Run one yourself and type its address into the app.
+
+### Host the server
+
+The server is one Node process. It serves the web app and accepts WebSocket connections on `/ws`. `GET /health` returns `ok`.
+
+```bash
+npm install
+npm run build
+PORT=43123 npm start
+```
+
+Put it behind HTTPS if phones will join from outside your home. A reverse proxy (Caddy, nginx) should forward both the site and the WebSocket upgrade on `/ws`. On the same Wi-Fi, `ws://` to the computer’s LAN address works. The Android app allows cleartext so that local address is usable. Open port 43123 on the firewall.
+
+Map tiles come from OpenStreetMap. There is no Google Maps key, no Firebase, and no other API key.
+
+## Android app
+
+A signed debug APK is `skulk.apk`. It asks for location only while a round is using real GPS. On-screen movement and practice do not need it.
+
+On the phone: Settings → Security → allow installs from this source (unknown apps), then open the APK. Android will say the app is signed with a debug certificate. That is expected for this build. Uninstall it before installing a later release signed with a different key.
+
+```bash
+npm run build
+npx cap sync android
+cd android && ./gradlew assembleDebug
+```
+
+The debug APK is `android/app/build/outputs/apk/debug/app-debug.apk`. You need a JDK and the Android SDK (`ANDROID_HOME`). `local.properties` should contain `sdk.dir`.
 
 ## Tests
 

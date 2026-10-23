@@ -78,21 +78,52 @@ export function Match({
   }, [sim, send, view.radiusM, view.settings.zoneLat, view.settings.zoneLng, view.you.id, view.you.lat, view.you.side])
 
   useEffect(() => {
-    if (sim || !navigator.geolocation) return
-    const watch = navigator.geolocation.watchPosition(
-      (position) => {
-        setGeoError(false)
-        send({
-          type: 'location',
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-          accuracy: position.coords.accuracy,
+    if (sim) return
+    const handle = { cancelled: false, id: null as string | null, browserId: null as number | null }
+    const publish = (lat: number, lng: number, accuracy: number | null) => {
+      if (handle.cancelled) return
+      setGeoError(false)
+      send({ type: 'location', lat, lng, accuracy: accuracy ?? undefined })
+    }
+    void (async () => {
+      try {
+        const { Geolocation } = await import('@capacitor/geolocation')
+        const perm = await Geolocation.requestPermissions()
+        const granted = perm.location === 'granted' || perm.coarseLocation === 'granted'
+        if (!granted) throw new Error('denied')
+        if (handle.cancelled) return
+        handle.id = await Geolocation.watchPosition(
+          { enableHighAccuracy: true, timeout: 12000, maximumAge: 2000 },
+          (position, err) => {
+            if (err || !position) {
+              if (!handle.cancelled) setGeoError(true)
+              return
+            }
+            publish(position.coords.latitude, position.coords.longitude, position.coords.accuracy)
+          },
+        )
+        if (handle.cancelled && handle.id) void Geolocation.clearWatch({ id: handle.id })
+      } catch {
+        if (handle.cancelled || !navigator.geolocation) {
+          if (!handle.cancelled) setGeoError(true)
+          return
+        }
+        handle.browserId = navigator.geolocation.watchPosition(
+          (position) => publish(position.coords.latitude, position.coords.longitude, position.coords.accuracy),
+          () => setGeoError(true),
+          { enableHighAccuracy: true, maximumAge: 2000, timeout: 12000 },
+        )
+      }
+    })()
+    return () => {
+      handle.cancelled = true
+      if (handle.id) {
+        void import('@capacitor/geolocation').then(({ Geolocation }) => {
+          if (handle.id) void Geolocation.clearWatch({ id: handle.id })
         })
-      },
-      () => setGeoError(true),
-      { enableHighAccuracy: true, maximumAge: 2000, timeout: 12000 },
-    )
-    return () => navigator.geolocation.clearWatch(watch)
+      }
+      if (handle.browserId != null) navigator.geolocation.clearWatch(handle.browserId)
+    }
   }, [sim, send])
 
   useEffect(() => {

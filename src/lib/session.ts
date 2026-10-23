@@ -3,6 +3,7 @@ const CODE_KEY = 'skulk-code'
 const PLAYER_KEY = 'skulk-player'
 const SIM_KEY = 'skulk-sim'
 const FORCE_SIM_KEY = 'skulk-force-sim'
+const SERVER_KEY = 'skulk-server'
 
 export function playerId(): string {
   let id = sessionStorage.getItem(PLAYER_KEY)
@@ -45,4 +46,14 @@ export function saveSim(on: boolean): void {
 export function forceSim(): void {
   sessionStorage.setItem(FORCE_SIM_KEY, '1')
   localStorage.setItem(SIM_KEY, '1')
+}
+
+export function loadServer(): string {
+  return localStorage.getItem(SERVER_KEY) ?? ''
+}
+
+export function saveServer(url: string): void {
+  const trimmed = url.trim()
+  if (!trimmed) localStorage.removeItem(SERVER_KEY)
+  else localStorage.setItem(SERVER_KEY, trimmed)
 }

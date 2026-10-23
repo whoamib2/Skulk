@@ -4,12 +4,14 @@ import { GameOver } from '@/components/GameOver'
 import { Home } from '@/components/Home'
 import { Lobby } from '@/components/Lobby'
 import { Match } from '@/components/Match'
-import { loadSim, saveSim } from '@/lib/session'
+import { isNativeApp } from '@/lib/native'
+import { loadServer, loadSim, saveServer, saveSim } from '@/lib/session'
 import { useGame } from '@/lib/useGame'
 
 export default function App() {
   const game = useGame()
   const [simChoice, setSimChoice] = useState<boolean | null>(null)
+  const [serverUrl, setServerUrl] = useState(loadServer)
   const [now, setNow] = useState(() => Date.now())
   const prefill = new URLSearchParams(window.location.search).get('join')?.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6) ?? ''
   const sim = simChoice ?? (loadSim() || Boolean(game.view?.practice))
@@ -30,6 +32,11 @@ export default function App() {
   function setSimMode(on: boolean) {
     saveSim(on)
     setSimChoice(on)
+  }
+
+  function setServer(url: string) {
+    saveServer(url)
+    setServerUrl(url)
   }
 
   return (
@@ -68,6 +75,9 @@ export default function App() {
             sim={sim}
             onSim={setSimMode}
             prefillCode={prefill}
+            serverUrl={serverUrl}
+            onServerUrl={setServer}
+            native={isNativeApp()}
             onCreate={(name, practice) => game.connect({ kind: 'create', practice }, name)}
             onJoin={(name, code) => game.connect({ kind: 'join', code }, name)}
           />

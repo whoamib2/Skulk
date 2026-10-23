@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { serverUrlProblem } from '@shared/serverUrl'
 import { cleanName } from '@shared/words'
 import { Mark } from '@/components/Mark'
 import { Button } from '@/components/ui/button'
@@ -15,6 +16,9 @@ export function Home({
   sim,
   onSim,
   prefillCode,
+  serverUrl,
+  onServerUrl,
+  native,
   onCreate,
   onJoin,
 }: {
@@ -23,6 +27,9 @@ export function Home({
   sim: boolean
   onSim: (on: boolean) => void
   prefillCode: string
+  serverUrl: string
+  onServerUrl: (url: string) => void
+  native: boolean
   onCreate: (name: string, practice: boolean) => void
   onJoin: (name: string, code: string) => void
 }) {
@@ -38,6 +45,13 @@ export function Home({
       return
     }
     setLocalError(null)
+    if (sheet !== 'practice') {
+      const problem = serverUrlProblem(serverUrl, native)
+      if (problem) {
+        setLocalError(problem)
+        return
+      }
+    }
     if (sheet === 'join') {
       const normalized = code.toUpperCase().replace(/[^A-Z0-9]/g, '')
       if (normalized.length < 4) {
@@ -65,9 +79,27 @@ export function Home({
       <div className="mt-8 grid gap-3">
         <Button size="lg" onClick={() => setSheet('host')} disabled={busy}>Host a round</Button>
         <Button size="lg" variant="secondary" onClick={() => setSheet('join')} disabled={busy}>Join with a code</Button>
-        <Button size="lg" variant="ghost" onClick={() => setSheet('practice')} disabled={busy}>Practice with bots</Button>
+        <Button size="lg" variant="ghost" onClick={() => setSheet('practice')} disabled={busy}>Practice on this phone</Button>
       </div>
-      <label className="mt-6 flex items-center justify-between gap-4 rounded-2xl border border-line bg-panel px-4 py-3">
+      <label className="mt-6 grid gap-2 rounded-2xl border border-line bg-panel px-4 py-3">
+        <span>
+          <span className="block text-sm">Game server</span>
+          <span className="block text-xs text-mist">
+            Host and join use this address. Leave it blank in a browser to use the site you’re on. Practice on this phone ignores it.
+          </span>
+        </span>
+        <Input
+          value={serverUrl}
+          onChange={(event) => onServerUrl(event.target.value)}
+          placeholder="https://your-server.example"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          inputMode="url"
+          aria-label="Game server"
+        />
+      </label>
+      <label className="mt-3 flex items-center justify-between gap-4 rounded-2xl border border-line bg-panel px-4 py-3">
         <span>
           <span className="block text-sm">On-screen movement</span>
           <span className="block text-xs text-mist">Walk the map with taps and arrow keys. For trying a round indoors.</span>
@@ -80,7 +112,12 @@ export function Home({
         <Step n="3" title="Scatter" body="Runners get a head start inside the circle. Hunters wait. No snapshots yet." />
         <Step n="4" title="Hunt by memory" body="Each ping shows where a runner was, and how long ago. Tag in person, within 15 m. They confirm. If anyone is still free at the end, the runners win." />
       </ol>
-      <p className="mt-8 text-xs text-mist">Play where you can see traffic, and stay off private property. Add Skulk to your home screen for a full-screen round.</p>
+      <p className="mt-8 text-xs text-mist">
+        Play where you can see traffic, and stay off private property.
+        {native
+          ? ' Practice runs on this phone. A hosted round needs the server above, and location permission when you are really walking.'
+          : ' Add Skulk to your home screen for a full-screen round.'}
+      </p>
 
       <Dialog open={sheet === 'host' || sheet === 'practice' || sheet === 'join'} onOpenChange={(open) => { if (!open) setSheet(null) }}>
         <DialogContent>
@@ -89,7 +126,7 @@ export function Home({
           </DialogTitle>
           <DialogDescription>
             {sheet === 'practice'
-              ? 'Four bots fill the lobby. You still start the clock.'
+              ? 'Four bots fill the lobby on this phone. No server. You still start the clock.'
               : sheet === 'join'
                 ? 'Ask the host for the code, or open their link.'
                 : 'You’ll land in the lobby with the code ready to share.'}
