@@ -7,6 +7,7 @@ import { lobbyFallbackMessage, locateProblemMessage } from '@shared/locate'
 import { describeZone } from '@shared/rules'
 import { publicJoinUrl } from '@shared/serverUrl'
 import type { ClientMessage, ClientView, RoleChoice } from '@shared/types'
+import { ExpandableMap } from '@/components/ExpandableMap'
 import { FindMeButton } from '@/components/FindMeButton'
 import { MapCanvas } from '@/components/MapCanvas'
 import { Button } from '@/components/ui/button'
@@ -140,34 +141,72 @@ export function Lobby({
         </div>
         <p className="mt-1 text-sm text-mist">Share {link.replace(/^https?:\/\//, '')}</p>
 
-        <div className="relative mt-4 h-56 overflow-hidden rounded-3xl border border-line">
-          {mapReady ? (
-            <MapCanvas
-              center={mapCenter}
-              radiusM={view.settings.zoneEnabled ? radius : view.radiusM}
-              zoneEnabled={view.settings.zoneEnabled}
-              shrinkWarning={false}
-              nextRadiusM={null}
-              markers={[]}
-              now={now}
-              followCenter={view.you.isHost}
-              here={here}
-              onZoneCenter={view.you.isHost ? (lat, lng) => send({ type: 'zone', lat, lng }) : undefined}
-              onReady={setMap}
-            />
-          ) : (
-            <div className="grid h-full place-items-center gap-2 text-sm text-mist">
-              <Loader2 className="size-6 animate-spin text-foam" />
-              Finding you…
-            </div>
-          )}
-          <div className="absolute inset-x-0 bottom-3 z-[1000] flex justify-center">
-            <FindMeButton pending={locating} onClick={() => void onFindMe()} />
+        {mapReady ? (
+          <ExpandableMap
+            className="relative mt-4 h-56 overflow-hidden rounded-3xl border border-line"
+            map={map}
+            overlay={
+              <>
+                {locateMessage && (
+                  <p className="pointer-events-auto max-w-sm rounded-2xl bg-ink/95 px-3 py-2 text-center text-sm text-foam">{locateMessage}</p>
+                )}
+                <FindMeButton pending={locating} onClick={() => void onFindMe()} />
+              </>
+            }
+            expandedControls={view.settings.zoneEnabled ? (
+              <div className="grid gap-3">
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <span>{view.you.isHost ? `Circle size · ${describeZone(radius, true)}` : describeZone(view.settings.zoneRadiusM, true)}</span>
+                  <button
+                    type="button"
+                    className="text-foam"
+                    onClick={() => map?.fitBounds(boundsFromRadius(view.settings.zoneLat, view.settings.zoneLng, radius), { padding: [24, 24] })}
+                  >
+                    Show circle
+                  </button>
+                </div>
+                {view.you.isHost && (
+                  <Slider
+                    min={150}
+                    max={3000}
+                    step={10}
+                    value={[radius]}
+                    onValueChange={(value) => setDragRadius(value[0] ?? radius)}
+                    onValueCommit={(value) => {
+                      const next = value[0] ?? radius
+                      setDragRadius(null)
+                      patch({ type: 'settings', settings: { zoneRadiusM: next } })
+                    }}
+                  />
+                )}
+              </div>
+            ) : undefined}
+          >
+            {(frame) => (
+              <MapCanvas
+                center={mapCenter}
+                radiusM={view.settings.zoneEnabled ? radius : view.radiusM}
+                zoneEnabled={view.settings.zoneEnabled}
+                shrinkWarning={false}
+                nextRadiusM={null}
+                markers={[]}
+                now={now}
+                followCenter={view.you.isHost}
+                here={here}
+                onZoneCenter={view.you.isHost ? (lat, lng) => send({ type: 'zone', lat, lng }) : undefined}
+                onExpand={frame.open ? undefined : frame.expand}
+                onReady={setMap}
+              />
+            )}
+          </ExpandableMap>
+        ) : (
+          <div className="relative mt-4 grid h-56 place-items-center gap-2 overflow-hidden rounded-3xl border border-line text-sm text-mist">
+            <Loader2 className="size-6 animate-spin text-foam" />
+            Finding you…
           </div>
-        </div>
-        {locateMessage && <p className="mt-2 text-sm text-foam">{locateMessage}</p>}
+        )}
         <div className="mt-2 flex items-center justify-between text-xs text-mist">
-          <span>{view.you.isHost ? 'Drag the map. The circle stays in the middle.' : 'The host is placing the circle.'}</span>
+          <span>{view.you.isHost ? 'Drag the map. The circle stays in the middle. Tap it to fill the screen.' : 'The host is placing the circle. Tap the map to fill the screen.'}</span>
           <button
             type="button"
             className="text-foam"

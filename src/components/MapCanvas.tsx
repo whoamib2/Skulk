@@ -17,6 +17,7 @@ interface MapCanvasProps {
   followCenter: boolean
   onZoneCenter?: (lat: number, lng: number) => void
   onMapClick?: (lat: number, lng: number) => void
+  onExpand?: () => void
   destination?: { lat: number; lng: number } | null
   you?: { lat: number; lng: number } | null
   here?: { lat: number; lng: number } | null
@@ -80,7 +81,7 @@ export function MapCanvas(props: MapCanvasProps) {
           />
         )}
         {props.here && <HereMarker lat={props.here.lat} lng={props.here.lng} />}
-        <Clicks onClick={props.onMapClick} />
+        <Clicks onClick={props.onMapClick} onExpand={props.onExpand} />
       </MapContainer>
     </div>
   )
@@ -141,10 +142,19 @@ function HereMarker({ lat, lng }: { lat: number; lng: number }) {
   return <Marker position={[lat, lng]} icon={icon} interactive={false} zIndexOffset={900} />
 }
 
-function Clicks({ onClick }: { onClick?: (lat: number, lng: number) => void }) {
-  useMapEvents({
-    click: (event) => onClick?.(event.latlng.lat, event.latlng.lng),
+function Clicks({ onClick, onExpand }: { onClick?: (lat: number, lng: number) => void; onExpand?: () => void }) {
+  const onClickRef = useRef(onClick)
+  const onExpandRef = useRef(onExpand)
+  onClickRef.current = onClick
+  onExpandRef.current = onExpand
+  const handlers = useRef({
+    click(event: { latlng: { lat: number; lng: number } }) {
+      const click = onClickRef.current
+      if (click) click(event.latlng.lat, event.latlng.lng)
+      else onExpandRef.current?.()
+    },
   })
+  useMapEvents(handlers.current)
   return null
 }
 

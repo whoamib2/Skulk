@@ -5,6 +5,7 @@ import { boundsFromRadius, destination, hashString } from '@shared/geo'
 import { formatAgo, formatClock, formatMeters } from '@shared/format'
 import { locateProblemMessage } from '@shared/locate'
 import type { ClientMessage, ClientView } from '@shared/types'
+import { ExpandableMap } from '@/components/ExpandableMap'
 import { FindMeButton } from '@/components/FindMeButton'
 import { MapCanvas } from '@/components/MapCanvas'
 import { Button } from '@/components/ui/button'
@@ -39,6 +40,7 @@ export function Match({
   const [locating, setLocating] = useState(false)
   const [locateMessage, setLocateMessage] = useState<string | null>(null)
   const mapRef = useRef<LeafletMap | null>(null)
+  const [leafletMap, setLeafletMap] = useState<LeafletMap | null>(null)
   const dropped = useRef(false)
   const seen = useRef(new Set<string>())
   const codeRef = useRef<string | null>(null)
@@ -171,31 +173,38 @@ export function Match({
   return (
     <div className="relative flex h-full flex-col" data-screen="map">
       <div className="relative z-0 min-h-0 flex-1 overflow-hidden">
-        <div className={tab === 'map' ? 'absolute inset-0' : 'invisible absolute inset-0'}>
-          <MapCanvas
-            center={{ lat: view.settings.zoneLat, lng: view.settings.zoneLng }}
-            radiusM={view.radiusM}
-            zoneEnabled={view.settings.zoneEnabled}
-            shrinkWarning={view.clock.shrinkWarning}
-            nextRadiusM={view.clock.nextRadiusM}
-            markers={view.markers}
-            now={now}
-            followCenter={false}
-            onMapClick={sim ? movement.walkTo : undefined}
-            destination={movement.destinationPoint}
-            you={you}
-            here={here}
-            onReady={(map) => { mapRef.current = map }}
-          />
-        </div>
-        {tab === 'map' && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-3 z-20 flex flex-col items-center gap-2 px-3">
-            {locateMessage && (
-              <p className="pointer-events-auto max-w-sm rounded-2xl bg-ink/95 px-3 py-2 text-center text-sm text-foam">{locateMessage}</p>
-            )}
-            <FindMeButton pending={locating} onClick={() => void onFindMe()} />
-          </div>
-        )}
+        <ExpandableMap
+          className={tab === 'map' ? 'absolute inset-0' : 'invisible absolute inset-0'}
+          map={leafletMap}
+          expandClassName="right-3 bottom-24"
+          overlay={tab === 'map' ? (
+            <>
+              {locateMessage && (
+                <p className="pointer-events-auto max-w-sm rounded-2xl bg-ink/95 px-3 py-2 text-center text-sm text-foam">{locateMessage}</p>
+              )}
+              <FindMeButton pending={locating} onClick={() => void onFindMe()} />
+            </>
+          ) : undefined}
+        >
+          {(frame) => (
+            <MapCanvas
+              center={{ lat: view.settings.zoneLat, lng: view.settings.zoneLng }}
+              radiusM={view.radiusM}
+              zoneEnabled={view.settings.zoneEnabled}
+              shrinkWarning={view.clock.shrinkWarning}
+              nextRadiusM={view.clock.nextRadiusM}
+              markers={view.markers}
+              now={now}
+              followCenter={false}
+              onMapClick={sim ? movement.walkTo : undefined}
+              onExpand={sim || frame.open ? undefined : frame.expand}
+              destination={movement.destinationPoint}
+              you={you}
+              here={here}
+              onReady={(map) => { mapRef.current = map; setLeafletMap(map) }}
+            />
+          )}
+        </ExpandableMap>
         {tab === 'radio' && (
           <div className="absolute inset-0 flex flex-col bg-ink">
             <div className="px-4 pt-24">

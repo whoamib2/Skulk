@@ -37,7 +37,7 @@ Open [http://127.0.0.1:43123](http://127.0.0.1:43123). The dev server serves the
 2. Host a round. In the lobby, tap **Sprint** (1 minute, 15 second head start, pings every 20 seconds) or pick your own times.
 3. Copy the code. Open more browser tabs, join with that code, and give each tab a name. Each tab is its own player.
 4. Pick sides so the teams are legal, then **Start the round**.
-5. Arrow keys, the N/E/S/W pad, or a tap on the map moves you. **Drop** places you on the spot you tap. Hunters can use **Drop and tag** on a ping to step within range and ask that runner to confirm.
+5. Arrow keys, the N/E/S/W pad, or a tap on the map moves you. **Drop** places you on the spot you tap. The expand icon fills the screen; a movement tap does not. Hunters can use **Drop and tag** on a ping to step within range and ask that runner to confirm.
 6. Tag, confirm, and play to the clock. **Practice on this phone** fills a lobby with bots and does not need the server.
 
 A phone’s real GPS is used when on-screen movement is off. Allow location when the round starts. The browser only shares it while the tab is open.
@@ -71,6 +71,8 @@ Map tiles come from OpenStreetMap. There is no Google Maps key, no Firebase, and
 ## Android app
 
 A signed debug APK is `skulk.apk`. Hosting asks for location so the circle starts where you are. **Find me** on the lobby and in-game maps asks again if it was not granted. On-screen movement does not need it.
+
+Tap the lobby map, or the in-game map when you are not walking it with taps, to fill the phone screen. The expand icon does the same thing. **Close** sits at the top right, inside the status-bar safe area. The Android back button closes it too. Pan, zoom, Find me, and the circle size stay usable while it is open.
 
 On the phone: Settings → Security → allow installs from this source (unknown apps), then open the APK. Android will say the app is signed with a debug certificate. That is expected for this build. Uninstall it before installing a later release signed with a different key.
 
