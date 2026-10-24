@@ -1,3 +1,5 @@
+import { DEFAULT_SERVER_URL } from '@shared/serverUrl'
+
 const NAME_KEY = 'skulk-name'
 const CODE_KEY = 'skulk-code'
 const PLAYER_KEY = 'skulk-player'
@@ -49,11 +51,10 @@ export function forceSim(): void {
 }
 
 export function loadServer(): string {
-  return localStorage.getItem(SERVER_KEY) ?? ''
+  const saved = localStorage.getItem(SERVER_KEY)
+  return saved === null ? DEFAULT_SERVER_URL : saved
 }
 
 export function saveServer(url: string): void {
-  const trimmed = url.trim()
-  if (!trimmed) localStorage.removeItem(SERVER_KEY)
-  else localStorage.setItem(SERVER_KEY, trimmed)
+  localStorage.setItem(SERVER_KEY, url.trim())
 }

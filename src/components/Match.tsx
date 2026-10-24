@@ -3,13 +3,16 @@ import type { Map as LeafletMap } from 'leaflet'
 import { Ellipsis, LocateFixed, Map as MapIcon, Radio as RadioIcon } from 'lucide-react'
 import { boundsFromRadius, destination, hashString } from '@shared/geo'
 import { formatAgo, formatClock, formatMeters } from '@shared/format'
+import { locateProblemMessage } from '@shared/locate'
 import type { ClientMessage, ClientView } from '@shared/types'
+import { FindMeButton } from '@/components/FindMeButton'
 import { MapCanvas } from '@/components/MapCanvas'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { locateOnce } from '@/lib/locate'
 import { useSim } from '@/lib/useSim'
 import { buzz } from '@/lib/utils'
 
@@ -32,6 +35,9 @@ export function Match({
   const [menu, setMenu] = useState(false)
   const [draft, setDraft] = useState('')
   const [geoError, setGeoError] = useState(false)
+  const [here, setHere] = useState<{ lat: number; lng: number } | null>(null)
+  const [locating, setLocating] = useState(false)
+  const [locateMessage, setLocateMessage] = useState<string | null>(null)
   const mapRef = useRef<LeafletMap | null>(null)
   const dropped = useRef(false)
   const seen = useRef(new Set<string>())
@@ -140,6 +146,21 @@ export function Match({
   const chasing = view.you.side === 'hunter' && !view.you.caught
   const recent = view.events.slice(-2)
 
+  async function onFindMe() {
+    setLocating(true)
+    setLocateMessage(null)
+    const result = await locateOnce()
+    setLocating(false)
+    if (!result.ok) {
+      setLocateMessage(locateProblemMessage(result.problem))
+      return
+    }
+    setHere({ lat: result.lat, lng: result.lng })
+    const map = mapRef.current
+    map?.flyTo([result.lat, result.lng], Math.max(map.getZoom(), 16), { duration: 0.75 })
+    if (!sim) send({ type: 'location', lat: result.lat, lng: result.lng, accuracy: result.accuracy ?? undefined })
+  }
+
   function sendRadio() {
     const text = draft.trim()
     if (!text) return
@@ -163,9 +184,18 @@ export function Match({
             onMapClick={sim ? movement.walkTo : undefined}
             destination={movement.destinationPoint}
             you={you}
+            here={here}
             onReady={(map) => { mapRef.current = map }}
           />
         </div>
+        {tab === 'map' && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-3 z-20 flex flex-col items-center gap-2 px-3">
+            {locateMessage && (
+              <p className="pointer-events-auto max-w-sm rounded-2xl bg-ink/95 px-3 py-2 text-center text-sm text-foam">{locateMessage}</p>
+            )}
+            <FindMeButton pending={locating} onClick={() => void onFindMe()} />
+          </div>
+        )}
         {tab === 'radio' && (
           <div className="absolute inset-0 flex flex-col bg-ink">
             <div className="px-4 pt-24">

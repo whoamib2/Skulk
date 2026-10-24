@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { serverUrlProblem } from '@shared/serverUrl'
+import { DEFAULT_SERVER_URL, serverUrlProblem } from '@shared/serverUrl'
 import { cleanName } from '@shared/words'
 import { Mark } from '@/components/Mark'
 import { Button } from '@/components/ui/button'
@@ -85,13 +85,13 @@ export function Home({
         <span>
           <span className="block text-sm">Game server</span>
           <span className="block text-xs text-mist">
-            Host and join use this address. Leave it blank in a browser to use the site you’re on. Practice on this phone ignores it.
+            Host and join use this address. It’s filled in with the public server, and you can change it. Leave it blank in a browser to use the site you’re on. Practice on this phone ignores it.
           </span>
         </span>
         <Input
           value={serverUrl}
           onChange={(event) => onServerUrl(event.target.value)}
-          placeholder="https://your-server.example"
+          placeholder={DEFAULT_SERVER_URL}
           autoCapitalize="off"
           autoCorrect="off"
           spellCheck={false}

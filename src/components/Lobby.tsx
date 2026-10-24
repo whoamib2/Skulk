@@ -1,14 +1,18 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import type { Map as LeafletMap } from 'leaflet'
-import { Check, Copy, Plus, X } from 'lucide-react'
+import { Check, Copy, Loader2, Plus, X } from 'lucide-react'
 import { boundsFromRadius } from '@shared/geo'
 import { formatDuration } from '@shared/format'
+import { lobbyFallbackMessage, locateProblemMessage } from '@shared/locate'
 import { describeZone } from '@shared/rules'
+import { publicJoinUrl } from '@shared/serverUrl'
 import type { ClientMessage, ClientView, RoleChoice } from '@shared/types'
+import { FindMeButton } from '@/components/FindMeButton'
 import { MapCanvas } from '@/components/MapCanvas'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
+import { locateOnce } from '@/lib/locate'
 
 const DURATIONS = [
   ['1 min', 60],
@@ -53,25 +57,68 @@ export function Lobby({
   view,
   now,
   send,
+  serverUrl,
+  native,
 }: {
   view: ClientView
   now: number
   send: (message: ClientMessage) => void
+  serverUrl: string
+  native: boolean
 }) {
   const [copied, setCopied] = useState(false)
   const [dragRadius, setDragRadius] = useState<number | null>(null)
   const [map, setMap] = useState<LeafletMap | null>(null)
+  const [here, setHere] = useState<{ lat: number; lng: number } | null>(null)
+  const [locating, setLocating] = useState(view.you.isHost)
+  const [locateMessage, setLocateMessage] = useState<string | null>(null)
+  const [mapReady, setMapReady] = useState(!view.you.isHost)
   const radius = dragRadius ?? view.settings.zoneRadiusM
-  const link = `${location.origin}/?join=${view.code}`
+  const link = publicJoinUrl(serverUrl, view.code, native, location.origin)
+  const mapCenter = here ?? { lat: view.settings.zoneLat, lng: view.settings.zoneLng }
 
-  async function copyCode() {
+  useEffect(() => {
+    if (!view.you.isHost) return
+    let alive = true
+    void locateOnce().then((result) => {
+      if (!alive) return
+      setLocating(false)
+      setMapReady(true)
+      if (!result.ok) {
+        setLocateMessage(lobbyFallbackMessage(result.problem))
+        return
+      }
+      setHere({ lat: result.lat, lng: result.lng })
+      send({ type: 'zone', lat: result.lat, lng: result.lng })
+    })
+    return () => {
+      alive = false
+    }
+  }, [send, view.you.isHost])
+
+  async function copyLink() {
     try {
-      await navigator.clipboard.writeText(view.code)
+      await navigator.clipboard.writeText(link)
       setCopied(true)
       window.setTimeout(() => setCopied(false), 1500)
     } catch {
       setCopied(false)
     }
+  }
+
+  async function onFindMe() {
+    setLocating(true)
+    setLocateMessage(null)
+    const result = await locateOnce()
+    setLocating(false)
+    setMapReady(true)
+    if (!result.ok) {
+      setLocateMessage(locateProblemMessage(result.problem))
+      return
+    }
+    setHere({ lat: result.lat, lng: result.lng })
+    if (view.you.isHost) send({ type: 'zone', lat: result.lat, lng: result.lng })
+    map?.flyTo([result.lat, result.lng], Math.max(map.getZoom(), 16), { duration: 0.75 })
   }
 
   function patch(settings: ClientMessage & { type: 'settings' }) {
@@ -86,27 +133,39 @@ export function Lobby({
             <p className="text-xs tracking-[0.16em] text-mist uppercase">{view.practice ? 'Practice lobby' : 'Lobby'}</p>
             <h1 className="font-display text-4xl">{view.code}</h1>
           </div>
-          <button type="button" onClick={() => void copyCode()} className="flex h-11 items-center gap-2 rounded-full border border-line px-3 text-sm">
+          <button type="button" onClick={() => void copyLink()} className="flex h-11 items-center gap-2 rounded-full border border-line px-3 text-sm">
             {copied ? <Check className="size-4 text-runner" /> : <Copy className="size-4" />}
-            {copied ? 'Copied' : 'Copy'}
+            {copied ? 'Copied' : 'Copy link'}
           </button>
         </div>
         <p className="mt-1 text-sm text-mist">Share {link.replace(/^https?:\/\//, '')}</p>
 
-        <div className="mt-4 h-56 overflow-hidden rounded-3xl border border-line">
-          <MapCanvas
-            center={{ lat: view.settings.zoneLat, lng: view.settings.zoneLng }}
-            radiusM={view.settings.zoneEnabled ? radius : view.radiusM}
-            zoneEnabled={view.settings.zoneEnabled}
-            shrinkWarning={false}
-            nextRadiusM={null}
-            markers={[]}
-            now={now}
-            followCenter={view.you.isHost}
-            onZoneCenter={view.you.isHost ? (lat, lng) => send({ type: 'zone', lat, lng }) : undefined}
-            onReady={setMap}
-          />
+        <div className="relative mt-4 h-56 overflow-hidden rounded-3xl border border-line">
+          {mapReady ? (
+            <MapCanvas
+              center={mapCenter}
+              radiusM={view.settings.zoneEnabled ? radius : view.radiusM}
+              zoneEnabled={view.settings.zoneEnabled}
+              shrinkWarning={false}
+              nextRadiusM={null}
+              markers={[]}
+              now={now}
+              followCenter={view.you.isHost}
+              here={here}
+              onZoneCenter={view.you.isHost ? (lat, lng) => send({ type: 'zone', lat, lng }) : undefined}
+              onReady={setMap}
+            />
+          ) : (
+            <div className="grid h-full place-items-center gap-2 text-sm text-mist">
+              <Loader2 className="size-6 animate-spin text-foam" />
+              Finding you…
+            </div>
+          )}
+          <div className="absolute inset-x-0 bottom-3 z-[1000] flex justify-center">
+            <FindMeButton pending={locating} onClick={() => void onFindMe()} />
+          </div>
         </div>
+        {locateMessage && <p className="mt-2 text-sm text-foam">{locateMessage}</p>}
         <div className="mt-2 flex items-center justify-between text-xs text-mist">
           <span>{view.you.isHost ? 'Drag the map. The circle stays in the middle.' : 'The host is placing the circle.'}</span>
           <button

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ClientMessage, ClientView, Intent, ServerMessage } from '@shared/types'
-import { resolveWsUrl, serverUrlProblem } from '@shared/serverUrl'
+import { healthUrlFor, resolveWsUrl, SERVER_WAKE_MS, serverUrlProblem, socketRetryDelayMs, stillWithinWake } from '@shared/serverUrl'
 import { LocalTable } from '@/lib/localTable'
 import { isNativeApp } from '@/lib/native'
 import { clearCode, forceSim, loadCode, loadName, loadServer, playerId, saveCode, saveName } from '@/lib/session'
@@ -14,6 +14,7 @@ export function useGame() {
   const [connected, setConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [skew, setSkew] = useState(0)
+  const [resuming, setResuming] = useState(() => Boolean(loadCode() && loadName() && resolveWsUrl(loadServer(), isNativeApp(), location.origin)))
   const wsRef = useRef<WebSocket | null>(null)
   const localRef = useRef<LocalTable | null>(null)
   const modeRef = useRef<'remote' | 'local' | null>(null)
@@ -23,41 +24,38 @@ export function useGame() {
   const closed = useRef(false)
   const retry = useRef(0)
   const viewRef = useRef<ClientView | null>(null)
+  const connectStarted = useRef(0)
+  const wakeTimer = useRef<number | null>(null)
+  const retryTimer = useRef<number | null>(null)
   const connectRef = useRef<(intent: Intent, name: string) => void>(() => {})
+  const stopRef = useRef<(message: string | null, clearSession: boolean) => void>(() => {})
 
   useEffect(() => {
     viewRef.current = view
   }, [view])
 
   useEffect(() => {
-    if (!error) return
+    if (!error || !view) return
     const id = window.setTimeout(() => setError(null), 4500)
     return () => window.clearTimeout(id)
-  }, [error])
+  }, [error, view])
 
   const applyServer = useCallback((message: ServerMessage) => {
     if (message.type === 'state') {
+      viewRef.current = message.view
       setView(message.view)
       setSkew(message.view.clock.serverNow - Date.now())
+      setStatus('live')
+      setConnected(true)
       if (message.view.practice) forceSim()
     } else if (message.type === 'error') {
-      setError(message.message)
       if (!viewRef.current && modeRef.current !== 'local') {
-        intentRef.current = null
-        clearCode()
-        setStatus('idle')
-      }
+        stopRef.current(message.message, true)
+      } else setError(message.message)
     } else if (message.type === 'dismissed') {
-      closed.current = true
-      intentRef.current = null
-      modeRef.current = null
-      clearCode()
-      setView(null)
-      setConnected(false)
-      setError(message.message)
-      setStatus('idle')
       localRef.current?.stop()
       localRef.current = null
+      stopRef.current(message.message, true)
     }
   }, [])
 
@@ -71,12 +69,170 @@ export function useGame() {
   }, [])
 
   useEffect(() => {
+    function clearTimers() {
+      if (wakeTimer.current != null) {
+        window.clearTimeout(wakeTimer.current)
+        wakeTimer.current = null
+      }
+      if (retryTimer.current != null) {
+        window.clearTimeout(retryTimer.current)
+        retryTimer.current = null
+      }
+    }
+
     function stopLocal() {
       localRef.current?.stop()
       localRef.current = null
     }
 
+    function stopToHome(message: string | null, clearSession: boolean) {
+      clearTimers()
+      gen.current += 1
+      closed.current = true
+      intentRef.current = null
+      modeRef.current = null
+      urlRef.current = null
+      wsRef.current?.close()
+      wsRef.current = null
+      stopLocal()
+      if (clearSession) clearCode()
+      viewRef.current = null
+      setView(null)
+      setConnected(false)
+      setStatus('idle')
+      setResuming(false)
+      setError(message)
+    }
+
+    stopRef.current = stopToHome
+
+    function giveUp() {
+      const resumed = intentRef.current?.kind === 'resume' || viewRef.current != null
+      const code = loadCode()
+      const message = resumed
+        ? (code
+          ? `Couldn’t rejoin ${code}. That round may have ended, or the server didn’t wake up.`
+          : 'Couldn’t rejoin that round. The server didn’t wake up.')
+        : 'The server didn’t wake up. Check the game server and try again.'
+      stopToHome(message, resumed)
+    }
+
+    function armDeadline() {
+      if (wakeTimer.current != null) window.clearTimeout(wakeTimer.current)
+      const remaining = Math.max(0, connectStarted.current + SERVER_WAKE_MS - Date.now())
+      if (remaining === 0) {
+        giveUp()
+        return
+      }
+      wakeTimer.current = window.setTimeout(() => {
+        wakeTimer.current = null
+        if (viewRef.current && wsRef.current?.readyState === WebSocket.OPEN) return
+        giveUp()
+      }, remaining)
+    }
+
+    function scheduleRetry(my: number) {
+      if (closed.current || !intentRef.current) return
+      if (!stillWithinWake(connectStarted.current, Date.now())) {
+        giveUp()
+        return
+      }
+      const delay = socketRetryDelayMs(retry.current)
+      retry.current += 1
+      retryTimer.current = window.setTimeout(() => {
+        retryTimer.current = null
+        if (gen.current === my) open()
+      }, delay)
+    }
+
+    function open() {
+      const my = ++gen.current
+      wsRef.current?.close()
+      stopLocal()
+      const intent = intentRef.current
+      const target = urlRef.current
+      if (!intent || !target) return
+      if (!stillWithinWake(connectStarted.current, Date.now())) {
+        giveUp()
+        return
+      }
+      modeRef.current = 'remote'
+      const health = healthUrlFor(target)
+      if (health) void fetch(health, { cache: 'no-store', mode: 'no-cors' }).catch(() => {})
+      let socket: WebSocket
+      try {
+        socket = new WebSocket(target)
+      } catch {
+        scheduleRetry(my)
+        return
+      }
+      wsRef.current = socket
+      socket.onopen = () => {
+        if (gen.current !== my) return
+        setConnected(true)
+        retry.current = 0
+        const hello: ClientMessage = {
+          type: 'hello',
+          playerId: playerId(),
+          name: loadName(),
+          intent,
+        }
+        socket.send(JSON.stringify(hello))
+      }
+      socket.onmessage = (event) => {
+        if (gen.current !== my) return
+        let message: ServerMessage
+        try {
+          message = JSON.parse(String(event.data)) as ServerMessage
+        } catch {
+          return
+        }
+        if (message.type === 'state' && modeRef.current === 'remote') {
+          saveCode(message.view.code)
+          if (wakeTimer.current != null) {
+            window.clearTimeout(wakeTimer.current)
+            wakeTimer.current = null
+          }
+        }
+        applyServer(message)
+      }
+      socket.onclose = () => {
+        if (gen.current !== my) return
+        setConnected(false)
+        if (closed.current || !intentRef.current || modeRef.current !== 'remote') return
+        if (viewRef.current) {
+          const code = loadCode()
+          if (code) {
+            intentRef.current = { kind: 'resume', code }
+            setResuming(true)
+          }
+          setStatus('connecting')
+          connectStarted.current = Date.now()
+          retry.current = 0
+          armDeadline()
+        }
+        scheduleRetry(my)
+      }
+    }
+
+    function begin(intent: Intent, target: string) {
+      clearTimers()
+      closed.current = false
+      retry.current = 0
+      connectStarted.current = Date.now()
+      modeRef.current = 'remote'
+      intentRef.current = intent
+      urlRef.current = target
+      setResuming(intent.kind === 'resume')
+      setStatus('connecting')
+      setError(null)
+      setConnected(false)
+      armDeadline()
+      open()
+    }
+
     function startLocal(name: string) {
+      clearTimers()
       gen.current += 1
       wsRef.current?.close()
       wsRef.current = null
@@ -86,6 +242,7 @@ export function useGame() {
       intentRef.current = { kind: 'create', practice: true }
       clearCode()
       forceSim()
+      setResuming(false)
       setStatus('live')
       setConnected(true)
       setError(null)
@@ -102,49 +259,6 @@ export function useGame() {
       })
     }
 
-    function open() {
-      const my = ++gen.current
-      wsRef.current?.close()
-      stopLocal()
-      const intent = intentRef.current
-      const target = urlRef.current
-      if (!intent || !target) return
-      modeRef.current = 'remote'
-      const socket = new WebSocket(target)
-      wsRef.current = socket
-      socket.onopen = () => {
-        if (gen.current !== my) return
-        setConnected(true)
-        setStatus('live')
-        retry.current = 0
-        const hello: ClientMessage = {
-          type: 'hello',
-          playerId: playerId(),
-          name: loadName(),
-          intent,
-        }
-        socket.send(JSON.stringify(hello))
-      }
-      socket.onmessage = (event) => {
-        if (gen.current !== my) return
-        const message = JSON.parse(String(event.data)) as ServerMessage
-        if (message.type === 'state' && modeRef.current === 'remote') saveCode(message.view.code)
-        applyServer(message)
-      }
-      socket.onclose = () => {
-        if (gen.current !== my) return
-        setConnected(false)
-        if (closed.current || !intentRef.current || modeRef.current !== 'remote') return
-        const code = loadCode()
-        if (code) intentRef.current = { kind: 'resume', code }
-        const delay = Math.min(4000, 400 * 2 ** retry.current)
-        retry.current += 1
-        window.setTimeout(() => {
-          if (gen.current === my) open()
-        }, delay)
-      }
-    }
-
     connectRef.current = (intent, name) => {
       saveName(name)
       if (intent.kind === 'create' && intent.practice) {
@@ -157,34 +271,23 @@ export function useGame() {
       if (problem || !target) {
         setError(problem ?? 'That server address is not a URL.')
         setStatus('idle')
+        setResuming(false)
         return
       }
       stopLocal()
-      closed.current = false
-      retry.current = 0
-      modeRef.current = 'remote'
-      intentRef.current = intent
-      urlRef.current = target
-      setStatus('connecting')
-      setError(null)
-      open()
+      if (intent.kind === 'create') clearCode()
+      begin(intent, target)
     }
 
     if (loadCode() && loadName()) {
       const native = isNativeApp()
       const target = resolveWsUrl(loadServer(), native, location.origin)
-      if (!target) {
-        clearCode()
-      } else {
-        intentRef.current = { kind: 'resume', code: loadCode() }
-        urlRef.current = target
-        modeRef.current = 'remote'
-        closed.current = false
-        open()
-      }
+      if (!target) clearCode()
+      else begin({ kind: 'resume', code: loadCode() }, target)
     }
 
     return () => {
+      clearTimers()
       gen.current += 1
       wsRef.current?.close()
       wsRef.current = null
@@ -192,25 +295,23 @@ export function useGame() {
     }
   }, [applyServer])
 
-  function leave() {
-    closed.current = true
-    intentRef.current = null
-    clearCode()
-    if (modeRef.current === 'local') {
+  function cancelConnect() {
+    const inRound = viewRef.current != null
+    const resumed = intentRef.current?.kind === 'resume' || inRound
+    if (inRound && modeRef.current === 'local') {
       localRef.current?.handle({ type: 'leave' })
-      localRef.current?.stop()
-      localRef.current = null
-      modeRef.current = null
-      setView(null)
-      setConnected(false)
-      setStatus('idle')
-      return
+    } else if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'leave' } satisfies ClientMessage))
     }
-    send({ type: 'leave' })
-    setView(null)
-    setStatus('idle')
-    gen.current += 1
-    wsRef.current?.close()
+    stopRef.current(null, resumed)
+  }
+
+  function leave() {
+    if (modeRef.current === 'local') localRef.current?.handle({ type: 'leave' })
+    else if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'leave' } satisfies ClientMessage))
+    }
+    stopRef.current(null, true)
   }
 
   return {
@@ -219,8 +320,10 @@ export function useGame() {
     status,
     connected,
     error,
+    resuming,
     send,
     leave,
+    cancelConnect,
     connect: (intent: Intent, name: string) => connectRef.current(intent, name),
   }
 }

@@ -19,6 +19,7 @@ interface MapCanvasProps {
   onMapClick?: (lat: number, lng: number) => void
   destination?: { lat: number; lng: number } | null
   you?: { lat: number; lng: number } | null
+  here?: { lat: number; lng: number } | null
   onReady?: (map: LeafletMap) => void
 }
 
@@ -78,6 +79,7 @@ export function MapCanvas(props: MapCanvasProps) {
             pathOptions={{ color: '#e7efe9', weight: 1, dashArray: '4 6', opacity: 0.8 }}
           />
         )}
+        {props.here && <HereMarker lat={props.here.lat} lng={props.here.lng} />}
         <Clicks onClick={props.onMapClick} />
       </MapContainer>
     </div>
@@ -127,6 +129,16 @@ function HostCircle(props: MapCanvasProps) {
   }, [map, props.radiusM])
   if (!props.zoneEnabled) return null
   return <Circle center={center as LatLngExpression} radius={props.radiusM} pathOptions={zoneStyle} />
+}
+
+function HereMarker({ lat, lng }: { lat: number; lng: number }) {
+  const icon = divIcon({
+    className: 'skulk-marker',
+    iconSize: [72, 48],
+    iconAnchor: [36, 16],
+    html: '<div class="here-wrap"><div class="here-dot"></div><div class="here-label">You</div></div>',
+  })
+  return <Marker position={[lat, lng]} icon={icon} interactive={false} zIndexOffset={900} />
 }
 
 function Clicks({ onClick }: { onClick?: (lat: number, lng: number) => void }) {

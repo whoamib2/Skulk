@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Mark } from '@/components/Mark'
+import { Button } from '@/components/ui/button'
 import { GameOver } from '@/components/GameOver'
 import { Home } from '@/components/Home'
 import { Lobby } from '@/components/Lobby'
@@ -56,16 +57,22 @@ export default function App() {
       </aside>
       <main className="mx-auto flex h-dvh w-full max-w-[480px] flex-col overflow-hidden bg-ink lg:h-[min(920px,calc(100dvh-3rem))] lg:rounded-[28px] lg:border lg:border-line">
         {view && !game.connected && (
-          <p className="bg-hunter px-3 py-1 text-center text-xs text-ink">Reconnecting…</p>
+          <div className="flex items-center justify-center gap-3 bg-hunter px-3 py-1 text-center text-xs text-ink">
+            <span>Reconnecting…</span>
+            <button type="button" className="font-medium underline" onClick={game.cancelConnect}>Back to start</button>
+          </div>
         )}
         {view && game.error && (
           <p className="bg-alert/90 px-3 py-1 text-center text-xs text-ink">{game.error}</p>
         )}
         {!view && game.status === 'connecting' ? (
           <div className="grid h-full place-items-center px-6 text-center">
-            <div>
+            <div className="w-full max-w-xs">
               <Mark className="mx-auto size-14" />
-              <p className="mt-4 text-sm text-mist">Rejoining the round…</p>
+              <p className="mt-4 text-sm text-foam">Waking the server…</p>
+              {game.resuming && <p className="mt-1 text-sm text-mist">Rejoining your round.</p>}
+              <p className="mt-2 text-sm text-mist">This can take a minute.</p>
+              <Button className="mt-6" variant="secondary" size="lg" onClick={game.cancelConnect}>Back to start</Button>
             </div>
           </div>
         ) : !view ? (
@@ -82,7 +89,7 @@ export default function App() {
             onJoin={(name, code) => game.connect({ kind: 'join', code }, name)}
           />
         ) : view.phase === 'lobby' ? (
-          <Lobby view={view} now={serverNow} send={game.send} />
+          <Lobby view={view} now={serverNow} send={game.send} serverUrl={serverUrl} native={isNativeApp()} />
         ) : view.phase === 'ended' ? (
           <GameOver view={view} now={serverNow} onDone={game.leave} />
         ) : (

@@ -46,14 +46,13 @@ A phone’s real GPS is used when on-screen movement is off. Allow location when
 
 ### Game server address
 
-The first screen has a **Game server** field.
+The first screen has a **Game server** field. It starts as `https://skulk.onrender.com`, and you can change it.
 
-- In a browser, leave it blank to use the site you are on (`/ws` on that host).
-- On the Android app, host and join need an address the phone can reach, such as `https://skulk.example.com` or `192.168.1.20:43123`.
-- `https://` becomes `wss://`, and a bare host gets `ws://` and the `/ws` path.
+- Host and join use that address. `https://` becomes `wss://`, and a bare host gets `ws://` and the `/ws` path.
+- Clear the field in a browser to use the site you are on (`/ws` on that host).
+- On the Android app, an empty field cannot host or join. The share link uses the server in the field, not the WebView’s localhost origin.
 - Practice on this phone ignores the field.
-
-This environment has no public host account, so the APK is not pointed at a live server. Run one yourself and type its address into the app.
+- The public server sleeps when nobody is playing. The app shows “Waking the server…” and keeps trying for about a minute and a half. **Back to start** leaves that screen. A saved round that cannot be rejoined is cleared.
 
 ### Host the server
 
@@ -71,7 +70,7 @@ Map tiles come from OpenStreetMap. There is no Google Maps key, no Firebase, and
 
 ## Android app
 
-A signed debug APK is `skulk.apk`. It asks for location only while a round is using real GPS. On-screen movement and practice do not need it.
+A signed debug APK is `skulk.apk`. Hosting asks for location so the circle starts where you are. **Find me** on the lobby and in-game maps asks again if it was not granted. On-screen movement does not need it.
 
 On the phone: Settings → Security → allow installs from this source (unknown apps), then open the APK. Android will say the app is signed with a debug certificate. That is expected for this build. Uninstall it before installing a later release signed with a different key.
 

@@ -1,3 +1,53 @@
+/** Public game server. The home field starts here, and players can change it. */
+export const DEFAULT_SERVER_URL = 'https://skulk.onrender.com'
+
+/** How long to keep trying a cold server before giving up. Render’s free plan can take about a minute to wake. */
+export const SERVER_WAKE_MS = 90_000
+
+export function socketRetryDelayMs(attempt: number): number {
+  const n = Math.max(0, Math.min(12, Math.floor(attempt)))
+  return Math.min(4_000, 400 * 2 ** n)
+}
+
+export function stillWithinWake(startedAt: number, now: number): boolean {
+  return now - startedAt < SERVER_WAKE_MS
+}
+
+export function healthUrlFor(wsUrl: string): string | null {
+  try {
+    const url = new URL(wsUrl)
+    if (url.protocol !== 'wss:' && url.protocol !== 'ws:') return null
+    const proto = url.protocol === 'wss:' ? 'https:' : 'http:'
+    return `${proto}//${url.host}/health`
+  } catch {
+    return null
+  }
+}
+
+/** Link a friend can open. The phone app must not use the WebView’s localhost origin. */
+export function publicJoinUrl(serverRaw: string, code: string, native: boolean, pageOrigin = ''): string {
+  const clean = code.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6)
+  return `${publicOrigin(serverRaw, native, pageOrigin)}/?join=${clean}`
+}
+
+function publicOrigin(serverRaw: string, native: boolean, pageOrigin: string): string {
+  const trimmed = serverRaw.trim()
+  if (!trimmed) return !native && pageOrigin ? originOf(pageOrigin) : DEFAULT_SERVER_URL
+  const ws = resolveWsUrl(trimmed, true)
+  if (!ws) return !native && pageOrigin ? originOf(pageOrigin) : DEFAULT_SERVER_URL
+  const url = new URL(ws)
+  const proto = url.protocol === 'wss:' ? 'https:' : 'http:'
+  return `${proto}//${url.host}`
+}
+
+function originOf(pageOrigin: string): string {
+  try {
+    return new URL(pageOrigin).origin
+  } catch {
+    return DEFAULT_SERVER_URL
+  }
+}
+
 /** Turn a typed server address into a WebSocket URL. Empty means this site, except on a phone app. */
 export function resolveWsUrl(raw: string, native: boolean, pageOrigin = ''): string | null {
   const trimmed = raw.trim()
