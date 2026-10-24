@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { DEFAULT_SERVER_URL, serverUrlProblem } from '@shared/serverUrl'
+import { DEFAULT_SERVER_URL, privacyPageUrl, serverUrlProblem } from '@shared/serverUrl'
 import { cleanName } from '@shared/words'
 import hero from '@/assets/brand/art1.svg'
 import { Wordmark } from '@/components/Wordmark'
@@ -123,6 +123,8 @@ export function Home({
         {native
           ? ' Practice runs on this phone. A hosted round needs the server above, and location permission when you are really walking.'
           : ' Add Skulk to your home screen for a full-screen round.'}
+        {' '}
+        <a className="text-foam underline" href={privacyPageUrl(serverUrl, native, window.location.origin)}>Privacy</a>
       </p>
 
       <Dialog open={sheet === 'host' || sheet === 'practice' || sheet === 'join'} onOpenChange={(open) => { if (!open) setSheet(null) }}>

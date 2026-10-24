@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_SERVER_URL,
   healthUrlFor,
+  privacyPageUrl,
   publicJoinUrl,
   resolveWsUrl,
   SERVER_WAKE_MS,
@@ -50,6 +51,14 @@ describe('publicJoinUrl', () => {
 
   it('uses this site in a browser when the field is empty', () => {
     expect(publicJoinUrl('', 'ab12cd', false, 'http://127.0.0.1:43123')).toBe('http://127.0.0.1:43123/?join=AB12CD')
+  })
+})
+
+describe('privacyPageUrl', () => {
+  it('uses the public server on a phone and this site in a browser', () => {
+    expect(privacyPageUrl('https://skulk.onrender.com', true, 'https://localhost')).toBe('https://skulk.onrender.com/privacy')
+    expect(privacyPageUrl('', true, 'https://localhost')).toBe('https://skulk.onrender.com/privacy')
+    expect(privacyPageUrl('', false, 'http://127.0.0.1:43123')).toBe('http://127.0.0.1:43123/privacy')
   })
 })
 

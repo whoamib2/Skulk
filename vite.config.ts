@@ -56,6 +56,7 @@ export default defineConfig({
     proxy: {
       '/ws': { target: 'http://127.0.0.1:43124', ws: true },
       '/health': 'http://127.0.0.1:43124',
+      '/privacy': 'http://127.0.0.1:43124',
     },
   },
 })

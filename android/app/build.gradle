@@ -1,5 +1,21 @@
 apply plugin: 'com.android.application'
 
+// Release signing reads the upload key from the environment, or from an untracked
+// android/keystore.properties. Never commit that file or the keystore.
+//   SKULK_UPLOAD_STORE_FILE
+//   SKULK_UPLOAD_STORE_PASSWORD
+//   SKULK_UPLOAD_KEY_ALIAS
+//   SKULK_UPLOAD_KEY_PASSWORD
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file('keystore.properties')
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+def releaseStoreFile = System.getenv('SKULK_UPLOAD_STORE_FILE') ?: keystoreProperties.getProperty('storeFile')
+def releaseStorePassword = System.getenv('SKULK_UPLOAD_STORE_PASSWORD') ?: keystoreProperties.getProperty('storePassword')
+def releaseKeyAlias = System.getenv('SKULK_UPLOAD_KEY_ALIAS') ?: keystoreProperties.getProperty('keyAlias')
+def releaseKeyPassword = System.getenv('SKULK_UPLOAD_KEY_PASSWORD') ?: keystoreProperties.getProperty('keyPassword')
+
 android {
     namespace = "app.skulk.game"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,8 +23,8 @@ android {
         applicationId "app.skulk.game"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode 5
+        versionName "1.0.0-beta5"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,8 +32,21 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (releaseStoreFile) {
+                storeFile file(releaseStoreFile)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
     buildTypes {
         release {
+            if (releaseStoreFile) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

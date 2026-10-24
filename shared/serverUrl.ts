@@ -30,6 +30,11 @@ export function publicJoinUrl(serverRaw: string, code: string, native: boolean, 
   return `${publicOrigin(serverRaw, native, pageOrigin)}/?join=${clean}`
 }
 
+/** Privacy policy. On a phone this is the public server, not the WebView origin. */
+export function privacyPageUrl(serverRaw: string, native: boolean, pageOrigin = ''): string {
+  return `${publicOrigin(serverRaw, native, pageOrigin)}/privacy`
+}
+
 function publicOrigin(serverRaw: string, native: boolean, pageOrigin: string): string {
   const trimmed = serverRaw.trim()
   if (!trimmed) return !native && pageOrigin ? originOf(pageOrigin) : DEFAULT_SERVER_URL

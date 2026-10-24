@@ -4,6 +4,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { WebSocketServer, type WebSocket } from 'ws'
 import { Hub } from './hub.ts'
+import { privacyDocument } from './privacy.ts'
 
 const dev = process.env.NODE_ENV !== 'production'
 const port = Number(process.env.PORT) || (dev ? 43124 : 43123)
@@ -29,6 +30,11 @@ const server = createServer((req, res) => {
   if (url.pathname === '/health') {
     res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' })
     res.end('ok')
+    return
+  }
+  if (url.pathname === '/privacy') {
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-cache' })
+    res.end(privacyDocument())
     return
   }
   if (!dev) {

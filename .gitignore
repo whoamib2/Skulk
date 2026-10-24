@@ -19,6 +19,11 @@ dist-ssr
 *.pem
 *.key
 
+# Release upload key. This repo is public: never commit the keystore or its passwords.
+android/keystore.properties
+keystore.properties
+keystore-credentials.txt
+
 # Android
 android/app/build
 android/build
