@@ -35,6 +35,11 @@ export function privacyPageUrl(serverRaw: string, native: boolean, pageOrigin = 
   return `${publicOrigin(serverRaw, native, pageOrigin)}/privacy`
 }
 
+/** Terms of use. Same origin rules as the privacy policy. */
+export function termsPageUrl(serverRaw: string, native: boolean, pageOrigin = ''): string {
+  return `${publicOrigin(serverRaw, native, pageOrigin)}/terms`
+}
+
 function publicOrigin(serverRaw: string, native: boolean, pageOrigin: string): string {
   const trimmed = serverRaw.trim()
   if (!trimmed) return !native && pageOrigin ? originOf(pageOrigin) : DEFAULT_SERVER_URL

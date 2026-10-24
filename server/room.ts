@@ -89,6 +89,9 @@ interface Player {
   outSince: number | null
   revealAnnounced: boolean
   history: { t: number; lat: number; lng: number }[]
+  distanceM: number
+  caughtAt: number | null
+  leftAt: number | null
   left: boolean
   spooked: boolean
   waypoint: { lat: number; lng: number } | null
@@ -115,6 +118,9 @@ function player(partial: Pick<Player, 'id' | 'name' | 'isHost' | 'isBot' | 'join
     outSince: null,
     revealAnnounced: false,
     history: [],
+    distanceM: 0,
+    caughtAt: null,
+    leftAt: null,
     left: false,
     spooked: false,
     waypoint: null,
@@ -137,6 +143,7 @@ export class Room {
   private readonly players = new Map<string, Player>()
   private order: string[] = []
   private readonly banned = new Set<string>()
+  private readonly blocks = new Map<string, Set<string>>()
   private readonly rng: () => number
   private events: GameEvent[] = []
   private radioLog: RadioMessage[] = []
@@ -437,6 +444,26 @@ export class Room {
     return { ok: true }
   }
 
+  block(blockerId: string, targetId: string): ActionResult {
+    const blocker = this.players.get(blockerId)
+    const target = this.players.get(targetId)
+    if (!blocker || blocker.left) return { ok: false, error: 'You are not in this round.' }
+    if (!target || target.left) return { ok: false, error: 'That player is not in this round.' }
+    if (blockerId === targetId) return { ok: false, error: 'You can’t block yourself.' }
+    const set = this.blocks.get(blockerId) ?? new Set<string>()
+    set.add(targetId)
+    this.blocks.set(blockerId, set)
+    this.dirty = true
+    return { ok: true }
+  }
+
+  unblock(blockerId: string, targetId: string): ActionResult {
+    const set = this.blocks.get(blockerId)
+    set?.delete(targetId)
+    this.dirty = true
+    return { ok: true }
+  }
+
   endRound(id: string, now: number): ActionResult {
     if (!this.players.get(id)?.isHost) return { ok: false, error: 'Only the host can end the round.' }
     if (this.phase === 'lobby' || this.phase === 'ended') return { ok: false, error: 'There is no live round to end.' }
@@ -465,6 +492,7 @@ export class Room {
       return
     }
     person.left = true
+    person.leftAt = now
     person.connected = false
     this.tags.delete(id)
     this.latestPings = this.latestPings.filter((ping) => ping.playerId !== id)
@@ -524,6 +552,8 @@ export class Room {
         left: person.left,
         pingAgeSec: sharePing ? Math.max(0, Math.floor((now - ping.at) / 1000)) : null,
         revealed: Boolean(sharePing) && revealed,
+        blockedByYou: this.blocks.get(viewer.id)?.has(person.id) ?? false,
+        flaggedBy: viewer.isHost ? this.flaggedBy(person.id, viewer.id) : [],
       }
     })
 
@@ -596,6 +626,8 @@ export class Room {
           : 0,
         revealed: this.isRevealed(viewer, now),
         connected: viewer.connected,
+        distanceM: Math.round(viewer.distanceM),
+        runSec: this.runSeconds(viewer, now),
       },
       settings: { ...this.settings },
       radiusM: this.radiusM,
@@ -620,7 +652,7 @@ export class Room {
       tagRadiusM: TAG_RADIUS_M,
       radio: radioOpen
         ? this.radioLog
-          .filter((message) => message.side === viewer.side)
+          .filter((message) => message.side === viewer.side && !this.blocks.get(viewer.id)?.has(message.playerId))
           .slice(-40)
           .map((message) => ({
             id: message.id,
@@ -640,6 +672,25 @@ export class Room {
         : { ok: false, reason: null, warning: null },
       result: this.result,
     }
+  }
+
+  private flaggedBy(targetId: string, hostId: string): string[] {
+    const names: string[] = []
+    for (const [blockerId, targets] of this.blocks) {
+      if (blockerId === hostId || !targets.has(targetId)) continue
+      const name = this.players.get(blockerId)?.name
+      if (name) names.push(name)
+    }
+    return names
+  }
+
+  /** Seconds after hunters were released, until this runner was caught, left, or the round ended. */
+  private runSeconds(person: Player, now: number): number {
+    if (person.side !== 'runner' || this.startedAt == null) return 0
+    const huntStart = this.headStartEndsAt ?? this.startedAt
+    const end = person.caughtAt ?? person.leftAt ?? (this.phase === 'ended' ? this.endedAt ?? now : now)
+    if (end <= huntStart) return 0
+    return Math.max(0, Math.round((end - huntStart) / 1000))
   }
 
   private autoBotRole(): RoleChoice {
@@ -674,6 +725,10 @@ export class Room {
   }
 
   private applyLocation(person: Player, lat: number, lng: number, accuracy: number | null, now: number): void {
+    if (person.lat != null && person.lng != null && (this.phase === 'headstart' || this.phase === 'hunt')) {
+      const step = distanceMeters(person.lat, person.lng, lat, lng)
+      if (step > 0 && step < 2000) person.distanceM += step
+    }
     person.lat = lat
     person.lng = lng
     person.accuracy = accuracy
@@ -904,6 +959,7 @@ export class Room {
 
   private catchRunner(runner: Player, hunter: Player, now: number): void {
     runner.caught = true
+    runner.caughtAt = now
     runner.outSince = null
     runner.revealAnnounced = false
     this.tags.delete(runner.id)

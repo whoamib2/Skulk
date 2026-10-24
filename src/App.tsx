@@ -6,6 +6,8 @@ import { Home } from '@/components/Home'
 import { Lobby } from '@/components/Lobby'
 import { Match } from '@/components/Match'
 import { isNativeApp } from '@/lib/native'
+import { hydrateDeviceStore } from '@/lib/deviceStore'
+import { recordFinishedRound } from '@/lib/recordRound'
 import { loadServer, loadSim, saveServer, saveSim } from '@/lib/session'
 import { useGame } from '@/lib/useGame'
 
@@ -21,6 +23,24 @@ export default function App() {
     const id = window.setInterval(() => setNow(Date.now()), 250)
     return () => window.clearInterval(id)
   }, [])
+
+  useEffect(() => {
+    void hydrateDeviceStore()
+  }, [])
+
+  useEffect(() => {
+    const current = game.view
+    if (!current || current.phase !== 'ended' || !current.result || !current.you.side) return
+    const key = `${current.code}:${current.clock.startedAt ?? 0}:${current.you.id}`
+    recordFinishedRound(key, {
+      side: current.you.side,
+      caught: current.you.caught,
+      left: current.roster.find((person) => person.isYou)?.left ?? false,
+      winner: current.result.winner,
+      runSec: current.you.runSec,
+      distanceM: current.you.distanceM,
+    })
+  }, [game.view])
 
   useEffect(() => {
     const role = game.view?.you.caught ? 'Watching' : game.view?.you.side === 'hunter' ? 'Hunter' : game.view?.you.side === 'runner' ? 'Runner' : null

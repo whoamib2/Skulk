@@ -40,6 +40,8 @@ export function parseMessage(raw: unknown): ClientMessage | null {
     return { type: 'zone', lat: msg.lat, lng: msg.lng }
   }
   if (msg.type === 'kick' && typeof msg.playerId === 'string') return { type: 'kick', playerId: msg.playerId }
+  if (msg.type === 'block' && typeof msg.playerId === 'string') return { type: 'block', playerId: msg.playerId }
+  if (msg.type === 'unblock' && typeof msg.playerId === 'string') return { type: 'unblock', playerId: msg.playerId }
   if (msg.type === 'start') return { type: 'start' }
   if (msg.type === 'location' && typeof msg.lat === 'number' && typeof msg.lng === 'number') {
     return {

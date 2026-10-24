@@ -74,6 +74,8 @@ export class Hub {
     if (message.type === 'prefs') this.reply(ws, room.setPreferred(playerId, message.role), room)
     else if (message.type === 'settings') this.reply(ws, room.updateSettings(playerId, message.settings), room)
     else if (message.type === 'zone') this.reply(ws, room.setZone(playerId, message.lat, message.lng), room)
+    else if (message.type === 'block') this.reply(ws, room.block(playerId, message.playerId), room)
+    else if (message.type === 'unblock') this.reply(ws, room.unblock(playerId, message.playerId), room)
     else if (message.type === 'kick') {
       const result = room.kick(playerId, message.playerId, now)
       if (!result.ok) this.send(ws, { type: 'error', message: result.error ?? 'Could not remove them.' })

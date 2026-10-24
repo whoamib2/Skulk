@@ -34,7 +34,7 @@ export function privacyDocument(): string {
     <h2>Location</h2>
     <p>Skulk uses your phone’s location only while you are in a round, so the map can place the play circle and follow the round’s rules. Those coordinates are sent to the game server for that round and shared with the other players in the same round. They are held in memory for the round, then dropped when the round is over and everyone has left. Skulk does not sell location, and it does not use it for advertising.</p>
     <h2>What else is on the device</h2>
-    <p>The name you pick is saved on your device so the next round can fill it in, and it is sent with you as your display name. A round code and a temporary player id stay in the browser or app session. None of this is an account.</p>
+    <p>The name you pick is saved on your device so the next round can fill it in, and it is sent with you as your display name. A round code and a temporary player id stay in the browser or app session. If you add an email or a username in settings, those stay on this device too. None of this is an account, and Skulk does not send the email anywhere.</p>
     <h2>Who else sees it</h2>
     <ul>
       <li>Players in your round see what the rules allow them to see: your name, and your location when the round says so.</li>
@@ -42,7 +42,7 @@ export function privacyDocument(): string {
       <li>Map tiles are loaded from OpenStreetMap so the map can draw.</li>
     </ul>
     <p>Skulk does not ask for your contacts, photos, or microphone, and it does not include third-party advertising.</p>
-    <p><a href="/">Back to Skulk</a></p>
+    <p><a href="/terms">Terms of use</a> · <a href="/">Back to Skulk</a></p>
   </main>
 </body>
 </html>

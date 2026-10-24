@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Map as LeafletMap } from 'leaflet'
 import { Check, Copy, Loader2, Plus, X } from 'lucide-react'
 import { boundsFromRadius } from '@shared/geo'
@@ -11,8 +11,11 @@ import { ExpandableMap } from '@/components/ExpandableMap'
 import { FindMeButton } from '@/components/FindMeButton'
 import { MapCanvas } from '@/components/MapCanvas'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
+import { t } from '@/lib/copy'
+import { blockPlayer, loadBlocks, unblockPlayer } from '@/lib/deviceStore'
 import { locateOnce } from '@/lib/locate'
 
 const DURATIONS = [
@@ -74,7 +77,10 @@ export function Lobby({
   const [locating, setLocating] = useState(view.you.isHost)
   const [locateMessage, setLocateMessage] = useState<string | null>(null)
   const [mapReady, setMapReady] = useState(!view.you.isHost)
+  const [pendingId, setPendingId] = useState<string | null>(null)
+  const blockSync = useRef(new Set<string>())
   const radius = dragRadius ?? view.settings.zoneRadiusM
+  const pending = view.roster.find((person) => person.id === pendingId && !person.isYou) ?? null
   const link = publicJoinUrl(serverUrl, view.code, native, location.origin)
   const mapCenter = here ?? { lat: view.settings.zoneLat, lng: view.settings.zoneLng }
 
@@ -96,6 +102,34 @@ export function Lobby({
       alive = false
     }
   }, [send, view.you.isHost])
+
+  useEffect(() => {
+    const local = new Set(loadBlocks().map((player) => player.id))
+    for (const person of view.roster) {
+      if (person.isYou) continue
+      const wantBlocked = local.has(person.id)
+      if (wantBlocked === person.blockedByYou) {
+        blockSync.current.delete(person.id)
+        continue
+      }
+      if (blockSync.current.has(person.id)) continue
+      blockSync.current.add(person.id)
+      send({ type: wantBlocked ? 'block' : 'unblock', playerId: person.id })
+    }
+  }, [send, view.roster])
+
+  function confirmBlock() {
+    if (!pending) return
+    if (pending.blockedByYou) {
+      unblockPlayer(pending.id)
+      send({ type: 'unblock', playerId: pending.id })
+    } else {
+      blockPlayer({ id: pending.id, name: pending.name })
+      send({ type: 'block', playerId: pending.id })
+    }
+    blockSync.current.delete(pending.id)
+    setPendingId(null)
+  }
 
   async function copyLink() {
     try {
@@ -252,20 +286,19 @@ export function Lobby({
           </div>
           <ul className="mt-2 divide-y divide-line rounded-2xl border border-line">
             {view.roster.map((person) => (
-              <li key={person.id} className="flex items-center justify-between gap-3 px-3 py-3">
-                <div>
-                  <p className="text-sm">
-                    {person.name}
-                    {person.isYou ? ' · you' : ''}
-                    {person.isHost ? ' · host' : ''}
-                    {person.isBot ? ' · bot' : ''}
-                    {!person.connected && !person.isBot ? ' · away' : ''}
-                  </p>
-                  <p className="text-xs text-mist capitalize">
-                    {person.preferredRole}
-                    {person.preferredRole === 'random' && person.likelySide ? ` · would ${person.likelySide === 'hunter' ? 'hunt' : 'run'}` : ''}
-                  </p>
-                </div>
+              <li key={person.id} className="flex items-center gap-2 px-3 py-2">
+                {person.isYou ? (
+                  <PlayerLine person={person} />
+                ) : (
+                  <button
+                    type="button"
+                    className="min-w-0 flex-1 rounded-xl py-1 text-left"
+                    aria-label={person.blockedByYou ? `${t('unblock')} ${person.name}` : `${t('block')} ${person.name}`}
+                    onClick={() => setPendingId(person.id)}
+                  >
+                    <PlayerLine person={person} host={view.you.isHost} />
+                  </button>
+                )}
                 {view.you.isHost && !person.isYou && (
                   <button type="button" className="rounded-full p-2 text-mist" aria-label={`Remove ${person.name}`} onClick={() => send({ type: 'kick', playerId: person.id })}>
                     <X className="size-4" />
@@ -274,6 +307,7 @@ export function Lobby({
               </li>
             ))}
           </ul>
+          <p className="mt-2 text-xs text-mist">Tap a player to block them. Their radio stays hidden from you, and the host is told.</p>
         </section>
 
         <section className="mt-5">
@@ -371,6 +405,47 @@ export function Lobby({
           <p className="py-3 text-center text-sm text-mist">Waiting for the host to start.</p>
         )}
       </div>
+      <Dialog open={pending != null} onOpenChange={(open) => { if (!open) setPendingId(null) }}>
+        <DialogContent>
+          <DialogTitle>{pending?.blockedByYou ? t('unblockTitle') : t('blockTitle')}</DialogTitle>
+          <DialogDescription>
+            {pending ? `${pending.name}. ` : ''}
+            {pending?.blockedByYou ? t('unblockBody') : t('blockBody')}
+          </DialogDescription>
+          <div className="mt-5 grid grid-cols-2 gap-2">
+            <Button variant="secondary" size="lg" onClick={() => setPendingId(null)}>{t('cancel')}</Button>
+            <Button size="lg" onClick={confirmBlock}>{pending?.blockedByYou ? t('unblock') : t('block')}</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+function PlayerLine({
+  person,
+  host = false,
+}: {
+  person: ClientView['roster'][number]
+  host?: boolean
+}) {
+  return (
+    <div className={host || person.isYou ? 'min-w-0 flex-1' : undefined}>
+      <p className="text-sm">
+        {person.name}
+        {person.isYou ? ' · you' : ''}
+        {person.isHost ? ' · host' : ''}
+        {person.isBot ? ' · bot' : ''}
+        {!person.connected && !person.isBot ? ' · away' : ''}
+        {person.blockedByYou ? ` · ${t('blocked')}` : ''}
+      </p>
+      <p className="text-xs text-mist capitalize">
+        {person.preferredRole}
+        {person.preferredRole === 'random' && person.likelySide ? ` · would ${person.likelySide === 'hunter' ? 'hunt' : 'run'}` : ''}
+      </p>
+      {host && person.flaggedBy.length > 0 && (
+        <p className="text-xs text-glow">{t('flaggedBy')} {person.flaggedBy.join(', ')}</p>
+      )}
     </div>
   )
 }

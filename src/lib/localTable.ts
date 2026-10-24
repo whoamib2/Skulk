@@ -30,6 +30,8 @@ export class LocalTable {
     else if (message.type === 'settings') this.reply(room.updateSettings(playerId, message.settings))
     else if (message.type === 'zone') this.reply(room.setZone(playerId, message.lat, message.lng))
     else if (message.type === 'kick') this.reply(room.kick(playerId, message.playerId, now))
+    else if (message.type === 'block') this.reply(room.block(playerId, message.playerId))
+    else if (message.type === 'unblock') this.reply(room.unblock(playerId, message.playerId))
     else if (message.type === 'start') this.reply(room.start(playerId, now))
     else if (message.type === 'location') {
       const result = room.setLocation(playerId, message.lat, message.lng, message.accuracy, now)

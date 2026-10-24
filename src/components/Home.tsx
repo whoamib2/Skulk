@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ChartColumn, Settings } from 'lucide-react'
 import { DEFAULT_SERVER_URL, privacyPageUrl, serverUrlProblem } from '@shared/serverUrl'
 import { cleanName } from '@shared/words'
 import hero from '@/assets/brand/art1.svg'
@@ -8,8 +9,11 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/compone
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { loadName } from '@/lib/session'
+import { SettingsScreen } from '@/components/SettingsScreen'
+import { StatsScreen } from '@/components/StatsScreen'
 
 type Sheet = 'host' | 'practice' | 'join' | 'rules' | null
+type Panel = 'stats' | 'settings' | null
 
 export function Home({
   error,
@@ -35,6 +39,7 @@ export function Home({
   onJoin: (name: string, code: string) => void
 }) {
   const [sheet, setSheet] = useState<Sheet>(prefillCode ? 'join' : null)
+  const [panel, setPanel] = useState<Panel>(null)
   const [name, setName] = useState(loadName())
   const [code, setCode] = useState(prefillCode)
   const [localError, setLocalError] = useState<string | null>(null)
@@ -65,11 +70,33 @@ export function Home({
     onCreate(cleaned, sheet === 'practice')
   }
 
+  if (panel === 'stats') return <StatsScreen onDone={() => setPanel(null)} />
+  if (panel === 'settings') {
+    return (
+      <SettingsScreen
+        serverUrl={serverUrl}
+        native={native}
+        onDone={() => {
+          setName(loadName())
+          setPanel(null)
+        }}
+      />
+    )
+  }
+
   return (
     <div className="flex h-full flex-col overflow-y-auto px-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-8">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <Wordmark />
-        <button type="button" className="text-sm text-mist" onClick={() => setSheet('rules')}>Rules</button>
+        <div className="flex items-center gap-1">
+          <button type="button" className="grid size-10 place-items-center rounded-full text-foam" aria-label="Your stats" onClick={() => setPanel('stats')}>
+            <ChartColumn className="size-5" />
+          </button>
+          <button type="button" className="grid size-10 place-items-center rounded-full text-foam" aria-label="Settings" onClick={() => setPanel('settings')}>
+            <Settings className="size-5" />
+          </button>
+          <button type="button" className="px-1 text-sm text-mist" onClick={() => setSheet('rules')}>Rules</button>
+        </div>
       </div>
       <img
         src={hero}

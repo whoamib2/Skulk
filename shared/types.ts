@@ -44,6 +44,9 @@ export interface RosterEntry {
   left: boolean
   pingAgeSec: number | null
   revealed: boolean
+  blockedByYou: boolean
+  /** Names of other players who blocked this person. Only filled in for the host. */
+  flaggedBy: string[]
 }
 
 export interface ViewMarker {
@@ -73,6 +76,9 @@ export interface ClientView {
     outForSec: number
     revealed: boolean
     connected: boolean
+    distanceM: number
+    /** Seconds after hunters were released. Zero for hunters and during the head start. */
+    runSec: number
   }
   settings: Settings
   radiusM: number
@@ -113,6 +119,8 @@ export type ClientMessage =
   | { type: 'settings'; settings: Partial<Settings> }
   | { type: 'zone'; lat: number; lng: number }
   | { type: 'kick'; playerId: string }
+  | { type: 'block'; playerId: string }
+  | { type: 'unblock'; playerId: string }
   | { type: 'start' }
   | { type: 'location'; lat: number; lng: number; accuracy?: number }
   | { type: 'tag'; runnerId: string }

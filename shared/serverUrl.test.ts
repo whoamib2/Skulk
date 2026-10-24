@@ -3,6 +3,7 @@ import {
   DEFAULT_SERVER_URL,
   healthUrlFor,
   privacyPageUrl,
+  termsPageUrl,
   publicJoinUrl,
   resolveWsUrl,
   SERVER_WAKE_MS,
@@ -59,6 +60,8 @@ describe('privacyPageUrl', () => {
     expect(privacyPageUrl('https://skulk.onrender.com', true, 'https://localhost')).toBe('https://skulk.onrender.com/privacy')
     expect(privacyPageUrl('', true, 'https://localhost')).toBe('https://skulk.onrender.com/privacy')
     expect(privacyPageUrl('', false, 'http://127.0.0.1:43123')).toBe('http://127.0.0.1:43123/privacy')
+    expect(termsPageUrl('https://skulk.onrender.com', true, 'https://localhost')).toBe('https://skulk.onrender.com/terms')
+    expect(termsPageUrl('', false, 'http://127.0.0.1:43123')).toBe('http://127.0.0.1:43123/terms')
   })
 })
 
