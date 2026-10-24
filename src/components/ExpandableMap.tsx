@@ -85,20 +85,19 @@ export function ExpandableMap({
   useLayoutEffect(() => {
     const shell = shellRef.current
     const slot = slotRef.current
-    if (!shell || !slot) return
+    const root = document.getElementById('root')
+    if (!shell || !slot || !root) return
+    // Stay inside #root. React delegates clicks there; moving the shell to
+    // document.body lets the tap hit the button and then drop the event, so
+    // Close, Find me, and the slider never run. A direct child of #root also
+    // escapes the in-game map's z-0 box, which would otherwise paint the
+    // footer over the fullscreen map.
     if (open) {
-      if (shell.parentElement !== document.body) document.body.appendChild(shell)
+      if (shell.parentElement !== root) root.appendChild(shell)
     } else if (shell.parentElement !== slot) {
       slot.appendChild(shell)
     }
   })
-
-  useEffect(() => {
-    const root = document.getElementById('root')
-    if (!open || !root) return
-    root.setAttribute('inert', '')
-    return () => root.removeAttribute('inert')
-  }, [open])
 
   useLayoutEffect(() => {
     const shell = shellRef.current
@@ -127,7 +126,7 @@ export function ExpandableMap({
           ? 'fixed inset-0 z-[4000] flex flex-col bg-ink pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)]'
           : 'relative h-full w-full'}
       >
-        <div className={open ? 'relative min-h-0 flex-1' : 'absolute inset-0'}>
+        <div className={open ? 'relative z-0 min-h-0 flex-1 isolate overflow-hidden' : 'absolute inset-0'}>
           {children({ open, expand })}
           {open ? (
             <button
@@ -151,13 +150,13 @@ export function ExpandableMap({
             </button>
           )}
           {overlay && (
-            <div className="pointer-events-none absolute inset-x-0 bottom-3 z-[1000] flex flex-col items-center gap-2 px-3">
+            <div className="pointer-events-none absolute inset-x-0 bottom-3 z-[1200] flex flex-col items-center gap-2 px-3">
               {overlay}
             </div>
           )}
         </div>
         {open && expandedControls && (
-          <div className="shrink-0 border-t border-line bg-ink px-4 pt-3 pb-3">
+          <div className="relative z-[1200] shrink-0 border-t border-line bg-ink px-4 pt-3 pb-3">
             {expandedControls}
           </div>
         )}
