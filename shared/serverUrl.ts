@@ -4,13 +4,24 @@ export const DEFAULT_SERVER_URL = 'https://skulk.onrender.com'
 /** How long to keep trying a cold server before giving up. Render’s free plan can take about a minute to wake. */
 export const SERVER_WAKE_MS = 90_000
 
+/** How long to keep retrying after a live round drops. A free-plan deploy often takes a few minutes. */
+export const RECONNECT_MS = 5 * 60 * 1000
+
+export function connectBudgetMs(rejoining: boolean): number {
+  return rejoining ? RECONNECT_MS : SERVER_WAKE_MS
+}
+
 export function socketRetryDelayMs(attempt: number): number {
   const n = Math.max(0, Math.min(12, Math.floor(attempt)))
   return Math.min(4_000, 400 * 2 ** n)
 }
 
 export function stillWithinWake(startedAt: number, now: number): boolean {
-  return now - startedAt < SERVER_WAKE_MS
+  return stillWithinBudget(startedAt, now, SERVER_WAKE_MS)
+}
+
+export function stillWithinBudget(startedAt: number, now: number, budgetMs: number): boolean {
+  return now - startedAt < budgetMs
 }
 
 export function healthUrlFor(wsUrl: string): string | null {

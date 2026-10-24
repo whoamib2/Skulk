@@ -3,7 +3,7 @@ import type { ClientMessage, ClientView, Intent, ServerMessage } from '@shared/t
 import { normalizeView } from '@shared/view'
 import { joinCodeFromUrl, shouldResumeSavedRound } from '@shared/appLink'
 import { isRoundLostMessage } from '@shared/roundEnd'
-import { healthUrlFor, resolveWsUrl, SERVER_WAKE_MS, serverUrlProblem, socketRetryDelayMs, stillWithinWake } from '@shared/serverUrl'
+import { connectBudgetMs, healthUrlFor, resolveWsUrl, serverUrlProblem, socketRetryDelayMs, stillWithinBudget } from '@shared/serverUrl'
 import { readLaunchUrl } from '@/lib/appLinks'
 import { LocalTable } from '@/lib/localTable'
 import { isNativeApp } from '@/lib/native'
@@ -129,23 +129,31 @@ export function useGame() {
       stopToHome(message, false)
     }
 
+    function rejoining(): boolean {
+      return viewRef.current != null || intentRef.current?.kind === 'resume'
+    }
+
+    function withinBudget(now = Date.now()): boolean {
+      return stillWithinBudget(connectStarted.current, now, connectBudgetMs(rejoining()))
+    }
+
     function armDeadline() {
       if (wakeTimer.current != null) window.clearTimeout(wakeTimer.current)
-      const remaining = Math.max(0, connectStarted.current + SERVER_WAKE_MS - Date.now())
+      const remaining = Math.max(0, connectStarted.current + connectBudgetMs(rejoining()) - Date.now())
       if (remaining === 0) {
         giveUp()
         return
       }
       wakeTimer.current = window.setTimeout(() => {
         wakeTimer.current = null
-        if (viewRef.current && wsRef.current?.readyState === WebSocket.OPEN) return
+        if (acceptedRef.current && wsRef.current?.readyState === WebSocket.OPEN) return
         giveUp()
       }, remaining)
     }
 
     function scheduleRetry(my: number) {
       if (closed.current || !intentRef.current) return
-      if (!stillWithinWake(connectStarted.current, Date.now())) {
+      if (!withinBudget()) {
         giveUp()
         return
       }
@@ -180,7 +188,7 @@ export function useGame() {
       const intent = intentRef.current
       const target = urlRef.current
       if (!intent || !target) return
-      if (!stillWithinWake(connectStarted.current, Date.now())) {
+      if (!withinBudget()) {
         giveUp()
         return
       }
@@ -235,6 +243,7 @@ export function useGame() {
       }
       socket.onclose = () => {
         if (gen.current !== my) return
+        const wasLive = acceptedRef.current
         acceptedRef.current = false
         setConnected(false)
         if (closed.current || !intentRef.current || modeRef.current !== 'remote') return
@@ -245,9 +254,11 @@ export function useGame() {
             setResuming(true)
           }
           setStatus('connecting')
-          connectStarted.current = Date.now()
-          retry.current = 0
-          armDeadline()
+          if (wasLive) {
+            connectStarted.current = Date.now()
+            retry.current = 0
+            armDeadline()
+          }
         }
         scheduleRetry(my)
       }

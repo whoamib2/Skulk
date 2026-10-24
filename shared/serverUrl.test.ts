@@ -6,9 +6,12 @@ import {
   termsPageUrl,
   publicJoinUrl,
   resolveWsUrl,
+  RECONNECT_MS,
   SERVER_WAKE_MS,
+  connectBudgetMs,
   serverUrlProblem,
   socketRetryDelayMs,
+  stillWithinBudget,
   stillWithinWake,
 } from './serverUrl.ts'
 
@@ -68,8 +71,13 @@ describe('privacyPageUrl', () => {
 describe('server wake', () => {
   it('retries for about 90 seconds and then stops', () => {
     expect(SERVER_WAKE_MS).toBe(90_000)
+    expect(RECONNECT_MS).toBe(5 * 60 * 1000)
+    expect(connectBudgetMs(false)).toBe(SERVER_WAKE_MS)
+    expect(connectBudgetMs(true)).toBe(RECONNECT_MS)
     expect(stillWithinWake(1_000, 90_999)).toBe(true)
     expect(stillWithinWake(1_000, 91_000)).toBe(false)
+    expect(stillWithinBudget(1_000, 1_000 + RECONNECT_MS - 1, RECONNECT_MS)).toBe(true)
+    expect(stillWithinBudget(1_000, 1_000 + RECONNECT_MS, RECONNECT_MS)).toBe(false)
     expect(socketRetryDelayMs(0)).toBe(400)
     expect(socketRetryDelayMs(1)).toBe(800)
     expect(socketRetryDelayMs(3)).toBe(3200)

@@ -128,9 +128,9 @@ export default function App() {
           <div className="grid h-full place-items-center px-6 text-center">
             <div className="w-full max-w-xs">
               <Wordmark className="mx-auto h-16 w-auto" />
-              <p className="mt-4 text-sm text-foam">Waking the server…</p>
+              <p className="mt-4 text-sm text-foam">{game.resuming ? 'Reconnecting…' : 'Waking the server…'}</p>
               {game.resuming && <p className="mt-1 text-sm text-mist">Rejoining your round.</p>}
-              <p className="mt-2 text-sm text-mist">This can take a minute.</p>
+              <p className="mt-2 text-sm text-mist">{game.resuming ? 'This can take a few minutes.' : 'This can take a minute.'}</p>
               <Button className="mt-6" variant="secondary" size="lg" onClick={game.cancelConnect}>Back to start</Button>
             </div>
           </div>
