@@ -19,8 +19,8 @@ export default defineConfig({
         name: 'Skulk',
         short_name: 'Skulk',
         description: 'Hide-and-seek on foot. Hunters get snapshots, not a live trail.',
-        theme_color: '#0e1210',
-        background_color: '#0e1210',
+        theme_color: '#140147',
+        background_color: '#140147',
         display: 'standalone',
         start_url: '/',
         icons: [

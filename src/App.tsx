@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Mark } from '@/components/Mark'
+import { Wordmark } from '@/components/Wordmark'
 import { Button } from '@/components/ui/button'
 import { GameOver } from '@/components/GameOver'
 import { Home } from '@/components/Home'
@@ -41,9 +41,9 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-dvh bg-[#090c0b] text-foam lg:flex lg:h-dvh lg:items-center lg:justify-center lg:gap-16 lg:px-12">
+    <div className="min-h-dvh bg-night text-foam lg:flex lg:h-dvh lg:items-center lg:justify-center lg:gap-16 lg:px-12">
       <aside className="hidden max-w-md lg:block">
-        <Mark className="size-14" />
+        <Wordmark className="h-16 w-auto" />
         <p className="mt-6 text-xs tracking-[0.18em] text-mist uppercase">Skulk</p>
         <h1 className="font-display mt-2 text-5xl leading-none">The phone keeps score. You do the running.</h1>
         <p className="mt-4 text-mist">
@@ -57,7 +57,7 @@ export default function App() {
       </aside>
       <main className="mx-auto flex h-dvh w-full max-w-[480px] flex-col overflow-hidden bg-ink lg:h-[min(920px,calc(100dvh-3rem))] lg:rounded-[28px] lg:border lg:border-line">
         {view && !game.connected && (
-          <div className="flex items-center justify-center gap-3 bg-hunter px-3 py-1 text-center text-xs text-ink">
+          <div className="flex items-center justify-center gap-3 bg-glow px-3 py-1 text-center text-xs text-ink">
             <span>Reconnecting…</span>
             <button type="button" className="font-medium underline" onClick={game.cancelConnect}>Back to start</button>
           </div>
@@ -68,7 +68,7 @@ export default function App() {
         {!view && game.status === 'connecting' ? (
           <div className="grid h-full place-items-center px-6 text-center">
             <div className="w-full max-w-xs">
-              <Mark className="mx-auto size-14" />
+              <Wordmark className="mx-auto h-16 w-auto" />
               <p className="mt-4 text-sm text-foam">Waking the server…</p>
               {game.resuming && <p className="mt-1 text-sm text-mist">Rejoining your round.</p>}
               <p className="mt-2 text-sm text-mist">This can take a minute.</p>

@@ -269,7 +269,7 @@ export function Match({
             </p>
           )}
           {view.clock.shrinkWarning && view.clock.nextRadiusM && (
-            <p className="pointer-events-auto mt-2 rounded-2xl bg-hunter px-3 py-2 text-sm text-ink">
+            <p className="pointer-events-auto mt-2 rounded-2xl bg-glow px-3 py-2 text-sm text-ink">
               Circle closes to {formatMeters(view.clock.nextRadiusM)}. Get inside the new edge.
             </p>
           )}
@@ -364,7 +364,7 @@ export function Match({
           </p>
         )}
         {geoError && !sim && (
-          <button type="button" className="mt-3 text-left text-sm text-hunter" onClick={() => onSim(true)}>
+          <button type="button" className="mt-3 text-left text-sm text-glow" onClick={() => onSim(true)}>
             This phone isn’t sharing a location. Switch to on-screen movement.
           </button>
         )}

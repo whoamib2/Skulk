@@ -363,7 +363,7 @@ export function Lobby({
         </section>
       </div>
       <div className="border-t border-line px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-        {view.canStart.warning && <p className="mb-2 text-sm text-hunter">{view.canStart.warning}</p>}
+        {view.canStart.warning && <p className="mb-2 text-sm text-glow">{view.canStart.warning}</p>}
         {view.canStart.reason && <p className="mb-2 text-sm text-mist">{view.canStart.reason}</p>}
         {view.you.isHost ? (
           <Button size="lg" disabled={!view.canStart.ok} onClick={() => send({ type: 'start' })}>Start the round</Button>

@@ -25,17 +25,17 @@ interface MapCanvasProps {
 }
 
 const zoneStyle = {
-  color: '#2fbf93',
+  color: '#7fcd9e',
   weight: 2,
-  fillColor: '#2fbf93',
+  fillColor: '#7fcd9e',
   fillOpacity: 0.08,
 }
 
 const warnStyle = {
-  color: '#f0a202',
+  color: '#fede79',
   weight: 2,
   dashArray: '8 8',
-  fillColor: '#f0a202',
+  fillColor: '#fede79',
   fillOpacity: 0.06,
 }
 
@@ -68,7 +68,7 @@ export function MapCanvas(props: MapCanvasProps) {
           <Circle
             center={[props.center.lat, props.center.lng]}
             radius={props.nextRadiusM}
-            pathOptions={{ color: '#f0a202', weight: 1, dashArray: '4 6', fillOpacity: 0 }}
+            pathOptions={{ color: '#fede79', weight: 1, dashArray: '4 6', fillOpacity: 0 }}
           />
         )}
         {props.markers.map((marker) => (
@@ -77,7 +77,7 @@ export function MapCanvas(props: MapCanvasProps) {
         {props.destination && props.you && (
           <Polyline
             positions={[[props.you.lat, props.you.lng], [props.destination.lat, props.destination.lng]]}
-            pathOptions={{ color: '#e7efe9', weight: 1, dashArray: '4 6', opacity: 0.8 }}
+            pathOptions={{ color: '#f9f4f8', weight: 1, dashArray: '4 6', opacity: 0.8 }}
           />
         )}
         {props.here && <HereMarker lat={props.here.lat} lng={props.here.lng} />}

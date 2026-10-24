@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { DEFAULT_SERVER_URL, serverUrlProblem } from '@shared/serverUrl'
 import { cleanName } from '@shared/words'
-import { Mark } from '@/components/Mark'
+import hero from '@/assets/brand/art1.svg'
+import { Wordmark } from '@/components/Wordmark'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -67,10 +68,15 @@ export function Home({
   return (
     <div className="flex h-full flex-col overflow-y-auto px-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-8">
       <div className="flex items-center justify-between">
-        <Mark />
+        <Wordmark />
         <button type="button" className="text-sm text-mist" onClick={() => setSheet('rules')}>Rules</button>
       </div>
-      <p className="mt-8 text-xs tracking-[0.18em] text-mist uppercase">On foot</p>
+      <img
+        src={hero}
+        alt="A coral runner sprinting past a lit window while a mint hider peeks from a tree"
+        className="mt-5 w-full rounded-3xl"
+      />
+      <p className="mt-6 text-xs tracking-[0.18em] text-mist uppercase">On foot</p>
       <h1 className="font-display mt-2 text-5xl leading-none text-foam">Hide on your feet.</h1>
       <p className="mt-4 max-w-sm text-base text-mist">
         Runners scatter inside a circle. Hunters don’t get a live dot. Every few minutes the map blinks, and then they have to guess.
@@ -185,7 +191,7 @@ export function Home({
 function Step({ n, title, body }: { n: string; title: string; body: string }) {
   return (
     <li className="grid grid-cols-[2rem_1fr] gap-3">
-      <span className="font-display text-xl text-hunter">{n}</span>
+      <span className="font-display text-xl text-glow">{n}</span>
       <span>
         <span className="block text-foam">{title}</span>
         <span className="mt-1 block text-mist">{body}</span>

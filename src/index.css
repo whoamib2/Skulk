@@ -3,15 +3,17 @@
 @theme {
   --font-display: "Fraunces", "Iowan Old Style", Palatino, Georgia, serif;
   --font-sans: "Outfit", "Avenir Next", "Segoe UI", sans-serif;
-  --color-ink: #0e1210;
-  --color-panel: #171c19;
-  --color-panel-2: #222a26;
-  --color-line: #31403a;
-  --color-foam: #e7efe9;
-  --color-mist: #93a29a;
-  --color-hunter: #f0a202;
-  --color-runner: #2fbf93;
-  --color-alert: #ff6b4a;
+  --color-night: #070022;
+  --color-ink: #140147;
+  --color-panel: #24105f;
+  --color-panel-2: #32167a;
+  --color-line: #8b6ad0;
+  --color-foam: #f9f4f8;
+  --color-mist: #d5c6e2;
+  --color-hunter: #7fcd9e;
+  --color-runner: #fe5458;
+  --color-glow: #fede79;
+  --color-alert: #ff8e86;
 }
 
 html, body, #root {
@@ -20,7 +22,7 @@ html, body, #root {
 
 body {
   margin: 0;
-  background: #090c0b;
+  background: var(--color-night);
   color: var(--color-foam);
   font-family: var(--font-sans);
   color-scheme: dark;
@@ -31,7 +33,7 @@ button, a, input {
 }
 
 :focus-visible {
-  outline: 2px solid var(--color-hunter);
+  outline: 2px solid var(--color-glow);
   outline-offset: 2px;
 }
 
@@ -68,7 +70,7 @@ button, a, input {
 .skulk-map .leaflet-container {
   height: 100%;
   width: 100%;
-  background: #0e1210;
+  background: var(--color-ink);
   font-family: var(--font-sans);
 }
 
@@ -77,14 +79,14 @@ button, a, input {
 }
 
 .skulk-map .leaflet-control-attribution {
-  background: rgba(14, 18, 16, 0.82) !important;
-  color: #93a29a !important;
+  background: rgba(20, 1, 71, 0.82) !important;
+  color: #d5c6e2 !important;
   font-size: 10px !important;
   max-width: 16rem;
 }
 
 .skulk-map .leaflet-control-attribution a {
-  color: #c9d6cf !important;
+  color: #f9f4f8 !important;
 }
 
 .skulk-marker {
@@ -106,42 +108,42 @@ button, a, input {
   display: grid;
   place-items: center;
   font: 600 11px/1 var(--font-sans);
-  border: 2px solid #e7efe9;
+  border: 2px solid var(--color-foam);
   position: relative;
 }
 
 .pin.you {
-  outline: 3px solid rgba(231, 239, 233, 0.45);
+  outline: 3px solid rgba(249, 244, 248, 0.45);
   outline-offset: 2px;
 }
 
 .pin.hunter {
-  background: #f0a202;
-  color: #1a1200;
-  border-color: #f0a202;
+  background: var(--color-hunter);
+  color: var(--color-ink);
+  border-color: var(--color-hunter);
 }
 
 .pin.runner {
-  background: #2fbf93;
-  color: #06241a;
-  border-color: #2fbf93;
+  background: var(--color-runner);
+  color: var(--color-ink);
+  border-color: var(--color-runner);
 }
 
 .pin.ping {
-  background: rgba(14, 18, 16, 0.35);
-  color: #e7efe9;
+  background: rgba(20, 1, 71, 0.35);
+  color: var(--color-foam);
   border-style: dashed;
 }
 
 .pin.reveal {
-  background: #ff6b4a;
-  color: #2a0a05;
-  border-color: #ff6b4a;
+  background: var(--color-alert);
+  color: var(--color-ink);
+  border-color: var(--color-alert);
 }
 
 .pin.spectate {
-  background: rgba(231, 239, 233, 0.16);
-  color: #e7efe9;
+  background: rgba(249, 244, 248, 0.16);
+  color: var(--color-foam);
 }
 
 .pin.fresh::after {
@@ -149,7 +151,7 @@ button, a, input {
   position: absolute;
   inset: -6px;
   border-radius: 999px;
-  border: 2px solid #f0a202;
+  border: 2px solid var(--color-glow);
   animation: skulk-pulse 1.6s ease-out infinite;
 }
 
@@ -159,8 +161,8 @@ button, a, input {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  background: rgba(14, 18, 16, 0.88);
-  color: #e7efe9;
+  background: rgba(20, 1, 71, 0.88);
+  color: var(--color-foam);
   border-radius: 999px;
   padding: 2px 6px;
   font: 600 10px/1.3 var(--font-sans);
@@ -177,15 +179,15 @@ button, a, input {
   width: 18px;
   height: 18px;
   border-radius: 999px;
-  background: #2fbf93;
-  border: 3px solid #e7efe9;
-  box-shadow: 0 0 0 6px rgba(47, 191, 147, 0.35);
+  background: var(--color-glow);
+  border: 3px solid var(--color-foam);
+  box-shadow: 0 0 0 6px rgba(254, 222, 121, 0.4);
 }
 
 .here-label {
   margin-top: 6px;
-  background: rgba(14, 18, 16, 0.88);
-  color: #e7efe9;
+  background: rgba(20, 1, 71, 0.88);
+  color: var(--color-foam);
   border-radius: 999px;
   padding: 2px 6px;
   font: 600 10px/1.3 var(--font-sans);
