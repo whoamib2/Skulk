@@ -3,6 +3,7 @@ import { createServer, type ServerResponse } from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { WebSocketServer, type WebSocket } from 'ws'
+import { assetLinksBody } from './assetlinks.ts'
 import { Hub } from './hub.ts'
 import { privacyDocument } from './privacy.ts'
 import { termsDocument } from './terms.ts'
@@ -41,6 +42,11 @@ const server = createServer((req, res) => {
   if (url.pathname === '/terms') {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-cache' })
     res.end(termsDocument())
+    return
+  }
+  if (url.pathname === '/.well-known/assetlinks.json') {
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-cache' })
+    res.end(assetLinksBody())
     return
   }
   if (!dev) {

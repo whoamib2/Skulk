@@ -58,6 +58,7 @@ export default defineConfig({
       '/health': 'http://127.0.0.1:43124',
       '/privacy': 'http://127.0.0.1:43124',
       '/terms': 'http://127.0.0.1:43124',
+      '/.well-known/assetlinks.json': 'http://127.0.0.1:43124',
     },
   },
 })

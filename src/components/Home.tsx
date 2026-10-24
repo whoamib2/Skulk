@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ChartColumn, Settings } from 'lucide-react'
+import { openInAppIntent } from '@shared/appLink'
 import { DEFAULT_SERVER_URL, privacyPageUrl, serverUrlProblem } from '@shared/serverUrl'
 import { cleanName } from '@shared/words'
 import hero from '@/assets/brand/art1.svg'
@@ -110,6 +111,7 @@ export function Home({
       </p>
       {error && <p className="mt-4 rounded-2xl border border-alert/40 bg-alert/10 px-3 py-2 text-sm text-foam">{error}</p>}
       <div className="mt-8 grid gap-3">
+        {!native && sheet !== 'join' && <OpenInApp code={prefillCode} />}
         <Button size="lg" onClick={() => setSheet('host')} disabled={busy}>Host a round</Button>
         <Button size="lg" variant="secondary" onClick={() => setSheet('join')} disabled={busy}>Join with a code</Button>
         <Button size="lg" variant="ghost" onClick={() => setSheet('practice')} disabled={busy}>Practice on this phone</Button>
@@ -166,6 +168,11 @@ export function Home({
                 ? 'Ask the host for the code, or open their link.'
                 : 'You’ll land in the lobby with the code ready to share.'}
           </DialogDescription>
+          {!native && sheet === 'join' && (
+            <div className="mt-5">
+              <OpenInApp code={code || prefillCode} />
+            </div>
+          )}
           <form
             className="mt-5 grid gap-3"
             onSubmit={(event) => {
@@ -214,6 +221,14 @@ export function Home({
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+function OpenInApp({ code }: { code: string }) {
+  return (
+    <Button asChild size="lg" variant="secondary">
+      <a href={openInAppIntent(code)}>Open in the Skulk app</a>
+    </Button>
   )
 }
 

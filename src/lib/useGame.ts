@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ClientMessage, ClientView, Intent, ServerMessage } from '@shared/types'
 import { normalizeView } from '@shared/view'
+import { joinCodeFromUrl, shouldResumeSavedRound } from '@shared/appLink'
 import { healthUrlFor, resolveWsUrl, SERVER_WAKE_MS, serverUrlProblem, socketRetryDelayMs, stillWithinWake } from '@shared/serverUrl'
+import { readLaunchUrl } from '@/lib/appLinks'
 import { LocalTable } from '@/lib/localTable'
 import { isNativeApp } from '@/lib/native'
 import { clearCode, forceSim, loadCode, loadName, loadServer, playerId, saveCode, saveName } from '@/lib/session'
@@ -9,13 +11,13 @@ import { clearCode, forceSim, loadCode, loadName, loadServer, playerId, saveCode
 export function useGame() {
   const [view, setView] = useState<ClientView | null>(null)
   const [status, setStatus] = useState<'idle' | 'connecting' | 'live'>(() => {
-    if (!loadCode() || !loadName()) return 'idle'
+    if (!shouldResumeSavedRound(location.href, loadCode(), loadName())) return 'idle'
     return resolveWsUrl(loadServer(), isNativeApp(), location.origin) ? 'connecting' : 'idle'
   })
   const [connected, setConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [skew, setSkew] = useState(0)
-  const [resuming, setResuming] = useState(() => Boolean(loadCode() && loadName() && resolveWsUrl(loadServer(), isNativeApp(), location.origin)))
+  const [resuming, setResuming] = useState(() => shouldResumeSavedRound(location.href, loadCode(), loadName()) && Boolean(resolveWsUrl(loadServer(), isNativeApp(), location.origin)))
   const wsRef = useRef<WebSocket | null>(null)
   const localRef = useRef<LocalTable | null>(null)
   const modeRef = useRef<'remote' | 'local' | null>(null)
@@ -281,14 +283,18 @@ export function useGame() {
       begin(intent, target)
     }
 
-    if (loadCode() && loadName()) {
+    let resumeCancelled = false
+    void readLaunchUrl().then((url) => {
+      if (resumeCancelled || joinCodeFromUrl(url)) return
+      if (!shouldResumeSavedRound(location.href, loadCode(), loadName())) return
       const native = isNativeApp()
       const target = resolveWsUrl(loadServer(), native, location.origin)
       if (!target) clearCode()
       else begin({ kind: 'resume', code: loadCode() }, target)
-    }
+    })
 
     return () => {
+      resumeCancelled = true
       clearTimers()
       gen.current += 1
       wsRef.current?.close()

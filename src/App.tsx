@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { joinCodeFromUrl } from '@shared/appLink'
 import { Wordmark } from '@/components/Wordmark'
 import { Button } from '@/components/ui/button'
 import { GameOver } from '@/components/GameOver'
 import { Home } from '@/components/Home'
 import { Lobby } from '@/components/Lobby'
 import { Match } from '@/components/Match'
+import { watchJoinLinks } from '@/lib/appLinks'
 import { isNativeApp } from '@/lib/native'
 import { hydrateDeviceStore } from '@/lib/deviceStore'
 import { recordFinishedRound } from '@/lib/recordRound'
@@ -16,7 +18,13 @@ export default function App() {
   const [simChoice, setSimChoice] = useState<boolean | null>(null)
   const [serverUrl, setServerUrl] = useState(loadServer)
   const [now, setNow] = useState(() => Date.now())
-  const prefill = new URLSearchParams(window.location.search).get('join')?.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6) ?? ''
+  const [appLinkReady, setAppLinkReady] = useState(() => !isNativeApp())
+  const [joinLink, setJoinLink] = useState(() => {
+    const code = joinCodeFromUrl(window.location.href)
+    return { code, token: code ? 1 : 0 }
+  })
+  const gameRef = useRef(game)
+  const setServerRef = useRef<(url: string) => void>(() => {})
   const sim = simChoice ?? (loadSim() || Boolean(game.view?.practice))
 
   useEffect(() => {
@@ -26,6 +34,22 @@ export default function App() {
 
   useEffect(() => {
     void hydrateDeviceStore()
+  }, [])
+
+  useEffect(() => {
+    gameRef.current = game
+    setServerRef.current = setServer
+  })
+
+  useEffect(() => {
+    return watchJoinLinks((link) => {
+      if (link.origin) setServerRef.current(link.origin)
+      const current = gameRef.current
+      if (current.view?.code === link.code) return
+      if (current.view) current.leave()
+      else if (current.status === 'connecting') current.cancelConnect()
+      setJoinLink((prev) => ({ code: link.code, token: prev.token + 1 }))
+    }, () => setAppLinkReady(true))
   }, [])
 
   useEffect(() => {
@@ -60,6 +84,8 @@ export default function App() {
     setServerUrl(url)
   }
 
+  const waitingForAppLink = isNativeApp() && !appLinkReady
+
   return (
     <div className="min-h-dvh bg-night text-foam lg:flex lg:h-dvh lg:items-center lg:justify-center lg:gap-16 lg:px-12">
       <aside className="hidden max-w-md lg:block">
@@ -85,7 +111,11 @@ export default function App() {
         {view && game.error && (
           <p className="bg-alert/90 px-3 py-1 text-center text-xs text-ink">{game.error}</p>
         )}
-        {!view && game.status === 'connecting' ? (
+        {!view && waitingForAppLink && game.status === 'connecting' ? (
+          <div className="grid h-full place-items-center px-6 text-center">
+            <Wordmark className="mx-auto h-16 w-auto" />
+          </div>
+        ) : !view && game.status === 'connecting' ? (
           <div className="grid h-full place-items-center px-6 text-center">
             <div className="w-full max-w-xs">
               <Wordmark className="mx-auto h-16 w-auto" />
@@ -97,11 +127,12 @@ export default function App() {
           </div>
         ) : !view ? (
           <Home
+            key={joinLink.token}
             error={game.error}
             busy={game.status === 'connecting'}
             sim={sim}
             onSim={setSimMode}
-            prefillCode={prefill}
+            prefillCode={joinLink.code}
             serverUrl={serverUrl}
             onServerUrl={setServer}
             native={isNativeApp()}
