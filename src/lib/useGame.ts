@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ClientMessage, ClientView, Intent, ServerMessage } from '@shared/types'
+import { normalizeView } from '@shared/view'
 import { healthUrlFor, resolveWsUrl, SERVER_WAKE_MS, serverUrlProblem, socketRetryDelayMs, stillWithinWake } from '@shared/serverUrl'
 import { LocalTable } from '@/lib/localTable'
 import { isNativeApp } from '@/lib/native'
@@ -42,12 +43,13 @@ export function useGame() {
 
   const applyServer = useCallback((message: ServerMessage) => {
     if (message.type === 'state') {
-      viewRef.current = message.view
-      setView(message.view)
-      setSkew(message.view.clock.serverNow - Date.now())
+      const view = normalizeView(message.view)
+      viewRef.current = view
+      setView(view)
+      setSkew(view.clock.serverNow - Date.now())
       setStatus('live')
       setConnected(true)
-      if (message.view.practice) forceSim()
+      if (view.practice) forceSim()
     } else if (message.type === 'error') {
       if (!viewRef.current && modeRef.current !== 'local') {
         stopRef.current(message.message, true)

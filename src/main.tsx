@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import 'leaflet/dist/leaflet.css'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { isNativeApp } from '@/lib/native'
 import App from './App.tsx'
 
@@ -13,6 +14,8 @@ if (!isNativeApp() && 'serviceWorker' in navigator) {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </StrictMode>,
 )

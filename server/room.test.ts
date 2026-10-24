@@ -18,6 +18,25 @@ function lobby() {
 }
 
 describe('Room', () => {
+  it('keeps the host view renderable when a second player joins', () => {
+    const room = new Room({ code: 'ABC234', hostId: HOST, hostName: 'Ada', now: 0 })
+    expect(room.addPlayer(RUNNER, 'Bea', 1).ok).toBe(true)
+    const host = room.view(HOST, 2)
+    const joiner = room.view(RUNNER, 2)
+    expect(host.roster.map((person) => person.name)).toEqual(['Ada', 'Bea'])
+    expect(joiner.you.isHost).toBe(false)
+    expect(joiner.roster.find((person) => person.isYou)?.name).toBe('Bea')
+    for (const view of [host, joiner]) {
+      expect(typeof view.you.distanceM).toBe('number')
+      expect(typeof view.you.runSec).toBe('number')
+      for (const person of view.roster) {
+        expect(Array.isArray(person.flaggedBy)).toBe(true)
+        expect(typeof person.blockedByYou).toBe('boolean')
+        expect(person.flaggedBy.length).toBeGreaterThanOrEqual(0)
+      }
+    }
+  })
+
   it('refuses to start with fewer than three players', () => {
     const room = new Room({ code: 'ABC234', hostId: HOST, hostName: 'Ada', now: 0 })
     room.addPlayer(RUNNER, 'Bea', 1)

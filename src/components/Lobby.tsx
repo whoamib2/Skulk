@@ -108,7 +108,8 @@ export function Lobby({
     for (const person of view.roster) {
       if (person.isYou) continue
       const wantBlocked = local.has(person.id)
-      if (wantBlocked === person.blockedByYou) {
+      const blockedNow = person.blockedByYou === true
+      if (wantBlocked === blockedNow) {
         blockSync.current.delete(person.id)
         continue
       }
@@ -293,7 +294,7 @@ export function Lobby({
                   <button
                     type="button"
                     className="min-w-0 flex-1 rounded-xl py-1 text-left"
-                    aria-label={person.blockedByYou ? `${t('unblock')} ${person.name}` : `${t('block')} ${person.name}`}
+                    aria-label={person.blockedByYou === true ? `${t('unblock')} ${person.name}` : `${t('block')} ${person.name}`}
                     onClick={() => setPendingId(person.id)}
                   >
                     <PlayerLine person={person} host={view.you.isHost} />
@@ -429,6 +430,7 @@ function PlayerLine({
   person: ClientView['roster'][number]
   host?: boolean
 }) {
+  const flags = Array.isArray(person.flaggedBy) ? person.flaggedBy : []
   return (
     <div className={host || person.isYou ? 'min-w-0 flex-1' : undefined}>
       <p className="text-sm">
@@ -443,8 +445,8 @@ function PlayerLine({
         {person.preferredRole}
         {person.preferredRole === 'random' && person.likelySide ? ` · would ${person.likelySide === 'hunter' ? 'hunt' : 'run'}` : ''}
       </p>
-      {host && person.flaggedBy.length > 0 && (
-        <p className="text-xs text-glow">{t('flaggedBy')} {person.flaggedBy.join(', ')}</p>
+      {host && flags.length > 0 && (
+        <p className="text-xs text-glow">{t('flaggedBy')} {flags.join(', ')}</p>
       )}
     </div>
   )

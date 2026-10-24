@@ -37,8 +37,8 @@ export default function App() {
       caught: current.you.caught,
       left: current.roster.find((person) => person.isYou)?.left ?? false,
       winner: current.result.winner,
-      runSec: current.you.runSec,
-      distanceM: current.you.distanceM,
+      runSec: current.you.runSec || 0,
+      distanceM: current.you.distanceM || 0,
     })
   }, [game.view])
 
