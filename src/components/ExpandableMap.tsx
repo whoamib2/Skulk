@@ -133,10 +133,10 @@ export function ExpandableMap({
           {children({ open, expand })}
           {hud && (
             <div
-              data-map-timer
+              data-map-hud
               className={open
-                ? 'pointer-events-none absolute top-3 left-3 z-[1100] max-w-[calc(100%-6.5rem)]'
-                : 'pointer-events-none absolute top-[max(0.5rem,env(safe-area-inset-top))] left-[max(0.75rem,env(safe-area-inset-left))] z-[1100] max-w-[calc(100%-1.5rem-env(safe-area-inset-right))]'}
+                ? 'pointer-events-none absolute top-3 left-3 right-[8.5rem] z-[1100]'
+                : 'pointer-events-none absolute top-[max(0.5rem,env(safe-area-inset-top))] right-[max(0.75rem,env(safe-area-inset-right))] left-[max(0.75rem,env(safe-area-inset-left))] z-[1100]'}
             >
               {hud}
             </div>

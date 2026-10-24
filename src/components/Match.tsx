@@ -3,6 +3,7 @@ import type { Map as LeafletMap } from 'leaflet'
 import { Ellipsis, LocateFixed, Map as MapIcon, Radio as RadioIcon } from 'lucide-react'
 import { boundsFromRadius, destination, hashString } from '@shared/geo'
 import { formatAgo, formatClock, formatMeters } from '@shared/format'
+import { mapHudText, phaseClock, radioToasts, radiusLabel, toastOpacity } from '@shared/mapHud'
 import { locateProblemMessage } from '@shared/locate'
 import type { ClientMessage, ClientView } from '@shared/types'
 import { ExpandableMap } from '@/components/ExpandableMap'
@@ -193,10 +194,11 @@ export function Match({
           map={leafletMap}
           expandClassName="right-3 bottom-24"
           hud={tab === 'map' ? (
-            <MapTimer view={view} headLeft={headLeft} roundLeft={roundLeft} hiding={hiding} />
+            <MapHud view={view} headLeft={headLeft} roundLeft={roundLeft} shrinkLeft={shrinkLeft} hiding={hiding} />
           ) : undefined}
           overlay={tab === 'map' ? (
             <>
+              <MapRadioToasts view={view} now={now} onOpen={() => setTab('radio')} />
               {locateMessage && (
                 <p className="pointer-events-auto max-w-sm rounded-2xl bg-ink/95 px-3 py-2 text-center text-sm text-foam">{locateMessage}</p>
               )}
@@ -409,30 +411,65 @@ export function Match({
   )
 }
 
-function MapTimer({
+function MapHud({
   view,
   headLeft,
   roundLeft,
+  shrinkLeft,
   hiding,
 }: {
   view: ClientView
   headLeft: number
   roundLeft: number
+  shrinkLeft: number | null
   hiding: boolean
 }) {
   const role = view.you.caught ? 'Watching' : view.you.side === 'hunter' ? 'Hunter' : 'Runner'
   const phase = view.you.caught ? 'Out' : view.phase === 'headstart' ? (hiding ? 'Hide' : 'Wait') : 'Hunt'
   const countdown = view.phase === 'headstart' && !view.you.caught ? headLeft : roundLeft
+  const closing = shrinkLeft != null && view.settings.shrinkEnabled && view.settings.zoneEnabled
+  const text = mapHudText({
+    role,
+    phaseClock: phaseClock(countdown),
+    phase,
+    roundClock: formatClock(roundLeft),
+    shrinkClock: closing ? formatClock(shrinkLeft) : null,
+    radiusLabel: radiusLabel(view.radiusM, view.settings.zoneEnabled),
+  })
   return (
-    <div className="rounded-2xl border border-line/80 bg-ink/90 px-3 py-1.5 text-foam shadow-lg backdrop-blur-sm">
-      <p className="text-sm leading-tight font-medium">
-        <span className="tracking-wide uppercase">{role}</span>
-        {' '}
-        <span className="font-display text-lg leading-none">{formatClock(countdown)}</span>
-        {' · '}
-        {phase}
-      </p>
-      <p className="text-[11px] text-mist">Round {formatClock(roundLeft)}</p>
+    <p className="line-clamp-2 rounded-2xl border border-line/50 bg-ink/65 px-2.5 py-1 text-[12px] leading-snug text-foam shadow-md backdrop-blur-sm">
+      {text}
+    </p>
+  )
+}
+
+function MapRadioToasts({
+  view,
+  now,
+  onOpen,
+}: {
+  view: ClientView
+  now: number
+  onOpen: () => void
+}) {
+  const fresh = radioToasts(view.radio, now)
+  if (fresh.length === 0) return null
+  return (
+    <div className="flex w-full flex-col items-start gap-1.5 pr-20">
+      {fresh.map((message) => (
+        <button
+          key={message.id}
+          type="button"
+          data-map-toast
+          onClick={onOpen}
+          style={{ opacity: toastOpacity(now - message.at) }}
+          className="pointer-events-auto max-w-full truncate rounded-full border border-line/50 bg-ink/70 px-3 py-1 text-left text-xs text-foam shadow-md backdrop-blur-sm"
+        >
+          <span className="text-mist">{message.you ? 'You' : message.name}</span>
+          {' · '}
+          {message.text}
+        </button>
+      ))}
     </div>
   )
 }
