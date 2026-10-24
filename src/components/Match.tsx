@@ -170,6 +170,21 @@ export function Match({
     setDraft('')
   }
 
+  const status = (
+    <RoundStatus
+      view={view}
+      headLeft={headLeft}
+      roundLeft={roundLeft}
+      pingLeft={pingLeft}
+      shrinkLeft={shrinkLeft}
+      hunting={hunting}
+      hiding={hiding}
+    />
+  )
+  const notices = (
+    <RoundNotices view={view} recent={tab === 'map' ? recent : []} hiding={hiding} send={send} />
+  )
+
   return (
     <div className="relative flex h-full flex-col" data-screen="map">
       <div className="relative z-0 min-h-0 flex-1 overflow-hidden">
@@ -205,13 +220,20 @@ export function Match({
             />
           )}
         </ExpandableMap>
-        {tab === 'radio' && (
-          <div className="absolute inset-0 flex flex-col bg-ink">
-            <div className="px-4 pt-24">
+        {tab === 'radio' ? (
+          <div className="absolute inset-0 z-20 flex min-h-0 flex-col bg-ink" data-screen="radio">
+            <div className="screen-safe shrink-0">
+              {status}
+              {notices}
+            </div>
+            <div className="screen-safe-x shrink-0 pt-4">
               <h2 className="font-display text-3xl">{view.you.side === 'hunter' ? 'Hunter radio' : 'Runner radio'}</h2>
               <p className="text-sm text-mist">{view.radioOpen ? 'The other side can’t read this.' : 'Radio is closed.'}</p>
             </div>
-            <ul className="mt-4 min-h-0 flex-1 space-y-3 overflow-y-auto px-4 pb-3">
+            <ul data-radio-feed className="screen-safe-x mt-4 min-h-0 flex-1 space-y-3 overflow-y-auto pb-3">
+              {view.events.map((event) => (
+                <li key={event.id} className="text-sm text-mist">{event.text}</li>
+              ))}
               {view.radio.length === 0 && <li className="text-sm text-mist">Your team is quiet. Plans stay on this side.</li>}
               {view.radio.map((message) => (
                 <li key={message.id} className={message.you ? 'text-right' : ''}>
@@ -222,7 +244,7 @@ export function Match({
             </ul>
             {view.radioOpen && (
               <form
-                className="flex gap-2 border-t border-line p-3"
+                className="screen-safe-x flex shrink-0 gap-2 border-t border-line py-3"
                 onSubmit={(event) => {
                   event.preventDefault()
                   sendRadio()
@@ -233,66 +255,15 @@ export function Match({
               </form>
             )}
           </div>
-        )}
-
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 px-3 pt-[max(0.6rem,env(safe-area-inset-top))]">
-          <div className="pointer-events-auto rounded-3xl border border-line/80 bg-ink/88 px-3 py-3 backdrop-blur-sm">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-[11px] tracking-[0.14em] text-mist uppercase">
-                  {view.you.caught ? 'Watching' : view.you.side === 'hunter' ? 'Hunter' : 'Runner'}
-                  {view.practice ? ' · practice' : ''}
-                </p>
-                <p className="font-display text-4xl leading-none">
-                  {view.phase === 'headstart' ? formatClock(headLeft) : formatClock(roundLeft)}
-                </p>
-                <p className="mt-1 text-xs text-mist">
-                  {view.phase === 'headstart'
-                    ? (hiding ? 'Hide. Hunters move when this hits zero.' : 'Head start. No snapshots yet.')
-                    : `${view.runnersLeft} of ${view.runnersTotal} still out`}
-                </p>
-              </div>
-              <div className="text-right text-xs text-mist">
-                {view.phase === 'headstart' && <p>Round {formatClock(roundLeft)}</p>}
-                {hunting && view.settings.pingIntervalSec > 0 && pingLeft != null && <p>Next ping {formatClock(pingLeft)}</p>}
-                {hunting && view.settings.pingIntervalSec === 0 && <p>No pings</p>}
-                {view.settings.zoneEnabled && <p>{formatMeters(view.radiusM)} circle</p>}
-                {shrinkLeft != null && view.settings.shrinkEnabled && <p>Closes in {formatClock(shrinkLeft)}</p>}
-              </div>
-            </div>
+        ) : (
+          <div className="screen-safe pointer-events-none absolute inset-x-0 top-0 z-10">
+            {status}
+            {notices}
           </div>
-          {view.you.outForSec > 0 && hiding && (
-            <p className="pointer-events-auto mt-2 rounded-2xl bg-alert px-3 py-2 text-sm text-ink">
-              {view.you.revealed
-                ? 'Hunters can see you live until you’re back inside.'
-                : `You’re outside the circle · ${view.you.outForSec}s. At 30s they see you live.`}
-            </p>
-          )}
-          {view.clock.shrinkWarning && view.clock.nextRadiusM && (
-            <p className="pointer-events-auto mt-2 rounded-2xl bg-glow px-3 py-2 text-sm text-ink">
-              Circle closes to {formatMeters(view.clock.nextRadiusM)}. Get inside the new edge.
-            </p>
-          )}
-          {view.pendingTag && (
-            <div className="pointer-events-auto mt-2 rounded-2xl border border-alert bg-ink px-3 py-3">
-              <p className="text-sm">{view.pendingTag.hunterName} says you’re tagged.</p>
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                <Button size="default" variant="danger" onClick={() => send({ type: 'tagAnswer', requestId: view.pendingTag!.id, accept: true })}>I got tagged</Button>
-                <Button size="default" variant="secondary" onClick={() => send({ type: 'tagAnswer', requestId: view.pendingTag!.id, accept: false })}>Still free</Button>
-              </div>
-            </div>
-          )}
-          {recent.length > 0 && (
-            <ul className="pointer-events-none mt-2 grid gap-1" aria-live="polite">
-              {recent.map((event) => (
-                <li key={event.id} className="truncate rounded-full bg-ink/80 px-3 py-1 text-xs text-mist">{event.text}</li>
-              ))}
-            </ul>
-          )}
-        </div>
+        )}
       </div>
 
-      <footer className="relative z-30 max-h-[46%] overflow-y-auto border-t border-line bg-panel px-3 pt-3 pb-[max(0.7rem,env(safe-area-inset-bottom))]">
+      <footer className="screen-safe-x relative z-30 max-h-[46%] overflow-y-auto border-t border-line bg-panel pt-3 pb-[max(0.7rem,env(safe-area-inset-bottom))]">
         <div className="chip-row">
           {view.roster.filter((person) => person.side === 'runner' && !person.left).map((person) => {
             const ping = view.markers.find((marker) => marker.id === person.id && (marker.kind === 'ping' || marker.kind === 'reveal'))
@@ -433,6 +404,97 @@ export function Match({
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+function RoundStatus({
+  view,
+  headLeft,
+  roundLeft,
+  pingLeft,
+  shrinkLeft,
+  hunting,
+  hiding,
+}: {
+  view: ClientView
+  headLeft: number
+  roundLeft: number
+  pingLeft: number | null
+  shrinkLeft: number | null
+  hunting: boolean
+  hiding: boolean
+}) {
+  return (
+    <div data-round-status className="pointer-events-auto rounded-3xl border border-line/80 bg-ink/88 px-3 py-3 backdrop-blur-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[11px] tracking-[0.14em] text-mist uppercase">
+            {view.you.caught ? 'Watching' : view.you.side === 'hunter' ? 'Hunter' : 'Runner'}
+            {view.practice ? ' · practice' : ''}
+          </p>
+          <p className="font-display text-4xl leading-none">
+            {view.phase === 'headstart' ? formatClock(headLeft) : formatClock(roundLeft)}
+          </p>
+          <p className="mt-1 text-xs text-mist">
+            {view.phase === 'headstart'
+              ? (hiding ? 'Hide. Hunters move when this hits zero.' : 'Head start. No snapshots yet.')
+              : `${view.runnersLeft} of ${view.runnersTotal} still out`}
+          </p>
+        </div>
+        <div className="text-right text-xs text-mist">
+          {view.phase === 'headstart' && <p>Round {formatClock(roundLeft)}</p>}
+          {hunting && view.settings.pingIntervalSec > 0 && pingLeft != null && <p>Next ping {formatClock(pingLeft)}</p>}
+          {hunting && view.settings.pingIntervalSec === 0 && <p>No pings</p>}
+          {view.settings.zoneEnabled && <p>{formatMeters(view.radiusM)} circle</p>}
+          {shrinkLeft != null && view.settings.shrinkEnabled && <p>Closes in {formatClock(shrinkLeft)}</p>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function RoundNotices({
+  view,
+  recent,
+  hiding,
+  send,
+}: {
+  view: ClientView
+  recent: ClientView['events']
+  hiding: boolean
+  send: (message: ClientMessage) => void
+}) {
+  return (
+    <>
+      {view.you.outForSec > 0 && hiding && (
+        <p className="pointer-events-auto mt-2 rounded-2xl bg-alert px-3 py-2 text-sm text-ink">
+          {view.you.revealed
+            ? 'Hunters can see you live until you’re back inside.'
+            : `You’re outside the circle · ${view.you.outForSec}s. At 30s they see you live.`}
+        </p>
+      )}
+      {view.clock.shrinkWarning && view.clock.nextRadiusM && (
+        <p className="pointer-events-auto mt-2 rounded-2xl bg-glow px-3 py-2 text-sm text-ink">
+          Circle closes to {formatMeters(view.clock.nextRadiusM)}. Get inside the new edge.
+        </p>
+      )}
+      {view.pendingTag && (
+        <div className="pointer-events-auto mt-2 rounded-2xl border border-alert bg-ink px-3 py-3">
+          <p className="text-sm">{view.pendingTag.hunterName} says you’re tagged.</p>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <Button size="default" variant="danger" onClick={() => send({ type: 'tagAnswer', requestId: view.pendingTag!.id, accept: true })}>I got tagged</Button>
+            <Button size="default" variant="secondary" onClick={() => send({ type: 'tagAnswer', requestId: view.pendingTag!.id, accept: false })}>Still free</Button>
+          </div>
+        </div>
+      )}
+      {recent.length > 0 && (
+        <ul className="pointer-events-none mt-2 grid gap-1" aria-live="polite">
+          {recent.map((event) => (
+            <li key={event.id} className="truncate rounded-full bg-ink/80 px-3 py-1 text-xs text-mist">{event.text}</li>
+          ))}
+        </ul>
+      )}
+    </>
   )
 }
 
