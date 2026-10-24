@@ -11,6 +11,7 @@ import {
   practiceSettings,
   withinTag,
   clampSettings,
+  clamp,
   describeZone,
 } from '../shared/rules.ts'
 import type {
@@ -26,13 +27,13 @@ import { cleanName, cleanRadio } from '../shared/words.ts'
 
 const BOT_NAMES = ['Juniper', 'Holt', 'Nia', 'Reed', 'Vela', 'Omar', 'Sable', 'Wynn', 'Idris', 'Pilar']
 
-interface Audience {
+export interface Audience {
   type: 'all' | 'player' | 'side'
   id?: string
   side?: Side
 }
 
-interface GameEvent {
+export interface GameEvent {
   id: string
   at: number
   text: string
@@ -40,7 +41,7 @@ interface GameEvent {
   audience: Audience
 }
 
-interface RadioMessage {
+export interface RadioMessage {
   id: string
   playerId: string
   name: string
@@ -49,7 +50,7 @@ interface RadioMessage {
   at: number
 }
 
-interface Ping {
+export interface Ping {
   playerId: string
   name: string
   lat: number
@@ -57,14 +58,14 @@ interface Ping {
   at: number
 }
 
-interface TagRequest {
+export interface TagRequest {
   id: string
   hunterId: string
   runnerId: string
   at: number
 }
 
-interface CatchRecord {
+export interface CatchRecord {
   runnerId: string
   runnerName: string
   hunterId: string
@@ -72,7 +73,7 @@ interface CatchRecord {
   at: number
 }
 
-interface Player {
+export interface Player {
   id: string
   name: string
   isHost: boolean
@@ -98,6 +99,37 @@ interface Player {
   hideUntil: number | null
   tagLockSince: number | null
   lastRadioAt: number
+}
+
+/** Durable copy of one round. Version 1 is the only shape the server reloads. */
+export interface RoomSnapshot {
+  version: 1
+  code: string
+  practice: boolean
+  phase: Phase
+  settings: Settings
+  radiusM: number
+  players: Player[]
+  order: string[]
+  banned: string[]
+  blocks: { id: string; blocked: string[] }[]
+  events: GameEvent[]
+  radioLog: RadioMessage[]
+  latestPings: Ping[]
+  tags: TagRequest[]
+  catches: CatchRecord[]
+  seq: number
+  botSeq: number
+  startedAt: number | null
+  headStartEndsAt: number | null
+  roundEndsAt: number | null
+  nextPingAt: number | null
+  shrinkAt: number | null
+  shrinkWarned: boolean
+  pingCount: number
+  result: RoundResult | null
+  endedAt: number | null
+  lastHumanAt: number
 }
 
 export interface ActionResult {
@@ -171,10 +203,29 @@ export class Room {
     now: number
     practice?: boolean
     rng?: () => number
+  } | {
+    snapshot: RoomSnapshot
+    rng?: () => number
   }) {
+    this.rng = options.rng ?? Math.random
+    if ('snapshot' in options) {
+      const snapshot = options.snapshot
+      if (snapshot.version !== 1 || typeof snapshot.code !== 'string' || snapshot.code.length === 0) {
+        throw new Error('bad snapshot')
+      }
+      if (snapshot.phase !== 'lobby' && snapshot.phase !== 'headstart' && snapshot.phase !== 'hunt' && snapshot.phase !== 'ended') {
+        throw new Error('bad snapshot')
+      }
+      this.code = snapshot.code
+      this.practice = Boolean(snapshot.practice)
+      this.settings = defaultSettings()
+      this.radiusM = this.settings.zoneRadiusM
+      this.lastHumanAt = Date.now()
+      this.loadSnapshot(snapshot)
+      return
+    }
     this.code = options.code
     this.practice = Boolean(options.practice)
-    this.rng = options.rng ?? Math.random
     this.settings = defaultSettings()
     this.radiusM = this.settings.zoneRadiusM
     this.lastHumanAt = options.now
@@ -196,6 +247,110 @@ export class Room {
       this.addBot(host.id, options.now, 'runner')
       this.addBot(host.id, options.now, 'runner')
     }
+  }
+
+  /** Plain JSON copy. Later edits to the live room do not change the returned object. */
+  snapshot(): RoomSnapshot {
+    return {
+      version: 1,
+      code: this.code,
+      practice: this.practice,
+      phase: this.phase,
+      settings: { ...this.settings },
+      radiusM: this.radiusM,
+      players: [...this.players.values()].map((person) => ({
+        ...person,
+        history: person.history.map((point) => ({ ...point })),
+        waypoint: person.waypoint ? { ...person.waypoint } : null,
+      })),
+      order: [...this.order],
+      banned: [...this.banned],
+      blocks: [...this.blocks.entries()].map(([id, blocked]) => ({ id, blocked: [...blocked] })),
+      events: this.events.map((event) => ({ ...event, audience: { ...event.audience } })),
+      radioLog: this.radioLog.map((message) => ({ ...message })),
+      latestPings: this.latestPings.map((ping) => ({ ...ping })),
+      tags: [...this.tags.values()].map((tag) => ({ ...tag })),
+      catches: this.catches.map((item) => ({ ...item })),
+      seq: this.seq,
+      botSeq: this.botSeq,
+      startedAt: this.startedAt,
+      headStartEndsAt: this.headStartEndsAt,
+      roundEndsAt: this.roundEndsAt,
+      nextPingAt: this.nextPingAt,
+      shrinkAt: this.shrinkAt,
+      shrinkWarned: this.shrinkWarned,
+      pingCount: this.pingCount,
+      result: this.result
+        ? {
+          ...this.result,
+          catches: this.result.catches.map((item) => ({ ...item })),
+          survivors: [...this.result.survivors],
+          left: [...this.result.left],
+        }
+        : null,
+      endedAt: this.endedAt,
+      lastHumanAt: this.lastHumanAt,
+    }
+  }
+
+  private loadSnapshot(snapshot: RoomSnapshot): void {
+    if (!Array.isArray(snapshot.players) || snapshot.players.length === 0) throw new Error('bad snapshot')
+    this.phase = snapshot.phase
+    this.settings = clampSettings(snapshot.settings)
+    this.radiusM = Number.isFinite(snapshot.radiusM)
+      ? clamp(Math.round(snapshot.radiusM), 150, 3000)
+      : this.settings.zoneRadiusM
+    for (const raw of snapshot.players) {
+      if (!raw || typeof raw.id !== 'string' || typeof raw.name !== 'string') continue
+      const person = copyPlayer(raw)
+      this.players.set(person.id, person)
+    }
+    if (this.players.size === 0) throw new Error('bad snapshot')
+    const known = new Set(this.players.keys())
+    this.order = (Array.isArray(snapshot.order) ? snapshot.order : []).filter((id) => known.has(id))
+    for (const id of this.players.keys()) {
+      if (!this.order.includes(id)) this.order.push(id)
+    }
+    this.banned.clear()
+    for (const id of Array.isArray(snapshot.banned) ? snapshot.banned : []) {
+      if (typeof id === 'string') this.banned.add(id)
+    }
+    this.blocks.clear()
+    for (const entry of Array.isArray(snapshot.blocks) ? snapshot.blocks : []) {
+      if (!entry || typeof entry.id !== 'string' || !Array.isArray(entry.blocked)) continue
+      this.blocks.set(entry.id, new Set(entry.blocked.filter((id) => typeof id === 'string')))
+    }
+    this.events = (Array.isArray(snapshot.events) ? snapshot.events : []).map((event) => ({
+      ...event,
+      audience: { ...event.audience },
+    }))
+    this.radioLog = (Array.isArray(snapshot.radioLog) ? snapshot.radioLog : []).map((message) => ({ ...message }))
+    this.latestPings = (Array.isArray(snapshot.latestPings) ? snapshot.latestPings : []).map((ping) => ({ ...ping }))
+    this.tags.clear()
+    for (const tag of Array.isArray(snapshot.tags) ? snapshot.tags : []) {
+      if (!tag || typeof tag.runnerId !== 'string') continue
+      this.tags.set(tag.runnerId, { ...tag })
+    }
+    this.catches = (Array.isArray(snapshot.catches) ? snapshot.catches : []).map((item) => ({ ...item }))
+    this.seq = Number.isFinite(snapshot.seq) ? snapshot.seq : 1
+    this.botSeq = Number.isFinite(snapshot.botSeq) ? snapshot.botSeq : 1
+    this.startedAt = finiteOrNull(snapshot.startedAt)
+    this.headStartEndsAt = finiteOrNull(snapshot.headStartEndsAt)
+    this.roundEndsAt = finiteOrNull(snapshot.roundEndsAt)
+    this.nextPingAt = finiteOrNull(snapshot.nextPingAt)
+    this.shrinkAt = finiteOrNull(snapshot.shrinkAt)
+    this.shrinkWarned = Boolean(snapshot.shrinkWarned)
+    this.pingCount = Number.isFinite(snapshot.pingCount) ? snapshot.pingCount : 0
+    this.result = snapshot.result ? {
+      ...snapshot.result,
+      catches: Array.isArray(snapshot.result.catches) ? snapshot.result.catches.map((item) => ({ ...item })) : [],
+      survivors: Array.isArray(snapshot.result.survivors) ? [...snapshot.result.survivors] : [],
+      left: Array.isArray(snapshot.result.left) ? [...snapshot.result.left] : [],
+    } : null
+    this.endedAt = finiteOrNull(snapshot.endedAt)
+    this.lastTick = 0
+    this.dismissed = false
+    this.dirty = false
   }
 
   has(id: string): boolean {
@@ -1035,6 +1190,47 @@ export class Room {
 function point(person: Player): { lat: number; lng: number } | null {
   if (person.lat == null || person.lng == null) return null
   return { lat: person.lat, lng: person.lng }
+}
+
+function finiteOrNull(value: number | null | undefined): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function copyPlayer(raw: Player): Player {
+  const next = player({
+    id: raw.id,
+    name: raw.name,
+    isHost: Boolean(raw.isHost),
+    isBot: Boolean(raw.isBot),
+    joinedAt: Number.isFinite(raw.joinedAt) ? raw.joinedAt : 0,
+    preferredRole: raw.preferredRole === 'hunter' || raw.preferredRole === 'runner' ? raw.preferredRole : 'random',
+  })
+  next.side = raw.side === 'hunter' || raw.side === 'runner' ? raw.side : null
+  next.caught = Boolean(raw.caught)
+  next.connected = next.isBot ? Boolean(raw.connected) : false
+  next.lat = finiteOrNull(raw.lat)
+  next.lng = finiteOrNull(raw.lng)
+  next.accuracy = finiteOrNull(raw.accuracy)
+  next.locAt = finiteOrNull(raw.locAt)
+  next.outSince = finiteOrNull(raw.outSince)
+  next.revealAnnounced = Boolean(raw.revealAnnounced)
+  next.history = Array.isArray(raw.history)
+    ? raw.history
+      .filter((point) => point && Number.isFinite(point.t) && Number.isFinite(point.lat) && Number.isFinite(point.lng))
+      .map((point) => ({ t: point.t, lat: point.lat, lng: point.lng }))
+    : []
+  next.distanceM = Number.isFinite(raw.distanceM) ? raw.distanceM : 0
+  next.caughtAt = finiteOrNull(raw.caughtAt)
+  next.leftAt = finiteOrNull(raw.leftAt)
+  next.left = Boolean(raw.left)
+  next.spooked = Boolean(raw.spooked)
+  next.waypoint = raw.waypoint && Number.isFinite(raw.waypoint.lat) && Number.isFinite(raw.waypoint.lng)
+    ? { lat: raw.waypoint.lat, lng: raw.waypoint.lng }
+    : null
+  next.hideUntil = finiteOrNull(raw.hideUntil)
+  next.tagLockSince = finiteOrNull(raw.tagLockSince)
+  next.lastRadioAt = Number.isFinite(raw.lastRadioAt) ? raw.lastRadioAt : 0
+  return next
 }
 
 export { describeZone }

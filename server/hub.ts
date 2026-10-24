@@ -1,9 +1,11 @@
 import type { WebSocket } from 'ws'
 import { makeCode } from '../shared/rules.ts'
+import { ROUND_RESTARTED } from '../shared/roundEnd.ts'
 import type { ServerMessage } from '../shared/types.ts'
 import { cleanName } from '../shared/words.ts'
 import { parseMessage } from './protocol.ts'
 import { Room } from './room.ts'
+import { noopRoomStore, type RoomStore } from './roomStore.ts'
 
 interface SocketState {
   playerId: string | null
@@ -16,6 +18,45 @@ export class Hub {
   private readonly socketPlayer = new Map<WebSocket, string>()
   private readonly playerRoom = new Map<string, string>()
   private readonly socketState = new WeakMap<WebSocket, SocketState>()
+  private readonly saveTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  private readonly tails = new Map<string, Promise<void>>()
+  private store: RoomStore
+  private readonly saveDelayMs: number
+
+  constructor(store: RoomStore = noopRoomStore(), saveDelayMs = 1000) {
+    this.store = store
+    this.saveDelayMs = saveDelayMs
+  }
+
+  setStore(store: RoomStore): void {
+    this.store = store
+  }
+
+  async restore(): Promise<void> {
+    const snapshots = await this.store.load()
+    let loaded = 0
+    for (const snapshot of snapshots) {
+      if (!snapshot || typeof snapshot.code !== 'string') continue
+      if (this.rooms.has(snapshot.code)) continue
+      try {
+        const room = new Room({ snapshot })
+        this.rooms.set(room.code, room)
+        loaded += 1
+      } catch {
+        console.error(`room restore failed ${snapshot.code}`)
+      }
+    }
+    console.log(`Loaded ${loaded} room(s)`)
+  }
+
+  async flush(): Promise<void> {
+    for (const code of [...this.saveTimers.keys()]) this.cancelSave(code)
+    for (const room of this.rooms.values()) {
+      if (room.dismissed) continue
+      this.enqueue(room.code, () => this.save(room))
+    }
+    await Promise.all([...this.tails.values()])
+  }
 
   connect(ws: WebSocket): void {
     this.socketState.set(ws, { playerId: null, greeted: false })
@@ -67,6 +108,8 @@ export class Hub {
     const playerId = this.socketPlayer.get(ws)
     const room = playerId ? this.roomFor(playerId) : undefined
     if (!playerId || !room) {
+      // A reconnect can deliver a GPS fix before hello. That is not a missing round.
+      if (message.type === 'location') return
       this.send(ws, { type: 'error', message: 'Join a round first.' })
       return
     }
@@ -124,7 +167,8 @@ export class Hub {
     const code = intent.code.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6)
     const room = this.rooms.get(code)
     if (!room) {
-      this.send(ws, { type: 'error', message: 'No round with that code.' })
+      const message = intent.kind === 'resume' ? ROUND_RESTARTED : 'No round with that code.'
+      this.send(ws, { type: 'error', message })
       return
     }
     if (room.isBanned(playerId)) {
@@ -193,14 +237,59 @@ export class Hub {
       if (!room.has(playerId)) continue
       this.send(socket, { type: 'state', view: room.view(playerId, now) })
     }
+    this.queueSave(room)
+  }
+
+  private queueSave(room: Room): void {
+    if (room.dismissed) return
+    const code = room.code
+    this.cancelSave(code)
+    const timer = setTimeout(() => {
+      this.saveTimers.delete(code)
+      const current = this.rooms.get(code)
+      if (!current || current.dismissed) return
+      this.enqueue(code, () => this.save(current))
+    }, this.saveDelayMs)
+    timer.unref()
+    this.saveTimers.set(code, timer)
+  }
+
+  private cancelSave(code: string): void {
+    const timer = this.saveTimers.get(code)
+    if (!timer) return
+    clearTimeout(timer)
+    this.saveTimers.delete(code)
+  }
+
+  private enqueue(code: string, work: () => Promise<void>): void {
+    const previous = this.tails.get(code) ?? Promise.resolve()
+    const next = previous.then(work, work)
+    this.tails.set(code, next)
+  }
+
+  private async save(room: Room): Promise<void> {
+    try {
+      await this.store.save(room.snapshot())
+    } catch {
+      console.error(`room save failed ${room.code}`)
+    }
   }
 
   private dismiss(room: Room, message: string): void {
+    const code = room.code
+    this.cancelSave(code)
+    this.rooms.delete(code)
+    this.enqueue(code, async () => {
+      try {
+        await this.store.remove(code)
+      } catch {
+        console.error(`room save failed ${code}`)
+      }
+    })
     for (const playerId of [...this.playerRoom.keys()]) {
-      if (this.playerRoom.get(playerId) !== room.code) continue
+      if (this.playerRoom.get(playerId) !== code) continue
       this.dismissPlayer(playerId, message)
     }
-    this.rooms.delete(room.code)
   }
 
   private dismissPlayer(playerId: string, message: string): void {

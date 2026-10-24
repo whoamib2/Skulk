@@ -6,12 +6,16 @@ import { WebSocketServer, type WebSocket } from 'ws'
 import { assetLinksBody } from './assetlinks.ts'
 import { Hub } from './hub.ts'
 import { privacyDocument } from './privacy.ts'
+import { openPostgresRoomStore } from './roomStore.ts'
 import { termsDocument } from './terms.ts'
 
 const dev = process.env.NODE_ENV !== 'production'
 const port = Number(process.env.PORT) || (dev ? 43124 : 43123)
 const clientDir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'client')
 const hub = new Hub()
+let accepting = !process.env.DATABASE_URL
+let stopping = false
+let closeStore: (() => Promise<void>) | null = null
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -59,6 +63,10 @@ const server = createServer((req, res) => {
 
 const wss = new WebSocketServer({ server, path: '/ws' })
 wss.on('connection', (ws: WebSocket) => {
+  if (!accepting) {
+    ws.close()
+    return
+  }
   hub.connect(ws)
 })
 
@@ -82,17 +90,58 @@ wss.on('connection', (socket) => {
   })
 })
 
-const ticker = setInterval(() => hub.tick(Date.now()), 250)
+const ticker = setInterval(() => {
+  if (accepting) hub.tick(Date.now())
+}, 250)
 
 server.listen(port, '0.0.0.0', () => {
   console.log(`Skulk ${dev ? 'dev ' : ''}server on :${port}`)
 })
 
+void boot()
+
+async function boot(): Promise<void> {
+  const databaseUrl = process.env.DATABASE_URL
+  if (!databaseUrl) {
+    if (!dev) console.error('DATABASE_URL is not set; rounds will not survive a restart')
+    return
+  }
+  try {
+    const store = await openPostgresRoomStore(databaseUrl, () => stopping)
+    if (stopping) {
+      await store.close()
+      return
+    }
+    closeStore = () => store.close()
+    hub.setStore(store)
+    await hub.restore()
+  } catch {
+    console.error('room database unavailable; rounds stay in memory for this process')
+  }
+  accepting = true
+}
+
 function shutdown(): void {
+  if (stopping) return
+  stopping = true
+  accepting = false
   clearInterval(heartbeat)
   clearInterval(ticker)
-  wss.close()
-  server.close()
+  void (async () => {
+    try {
+      await hub.flush()
+    } catch {
+      console.error('room save failed')
+    }
+    try {
+      await closeStore?.()
+    } catch {
+      console.error('room save failed')
+    }
+    wss.close()
+    server.close(() => process.exit(0))
+    setTimeout(() => process.exit(0), 2_000).unref()
+  })()
 }
 
 process.on('SIGINT', shutdown)

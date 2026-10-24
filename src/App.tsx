@@ -102,16 +102,25 @@ export default function App() {
         </ol>
       </aside>
       <main className="mx-auto flex h-dvh w-full max-w-[480px] flex-col overflow-hidden bg-ink lg:h-[min(920px,calc(100dvh-3rem))] lg:rounded-[28px] lg:border lg:border-line">
-        {view && !game.connected && (
+        {view && !game.restarted && !game.connected && (
           <div className="flex items-center justify-center gap-3 bg-glow px-3 py-1 text-center text-xs text-ink">
             <span>Reconnecting…</span>
             <button type="button" className="font-medium underline" onClick={game.cancelConnect}>Back to start</button>
           </div>
         )}
-        {view && game.error && (
+        {view && !game.restarted && game.error && (
           <p className="bg-alert/90 px-3 py-1 text-center text-xs text-ink">{game.error}</p>
         )}
-        {!view && waitingForAppLink && game.status === 'connecting' ? (
+        {game.restarted ? (
+          <div data-screen="restarted" className="grid h-full place-items-center px-6 text-center">
+            <div className="w-full max-w-xs">
+              <Wordmark className="mx-auto h-16 w-auto" />
+              <h2 className="font-display mt-4 text-2xl leading-tight text-foam">Round ended because the server restarted</h2>
+              <p className="mt-3 text-sm text-mist">This round was still on your phone, but the server no longer has it.</p>
+              <Button className="mt-6" size="lg" onClick={game.dismissRestart}>Back to lobby</Button>
+            </div>
+          </div>
+        ) : !view && waitingForAppLink && game.status === 'connecting' ? (
           <div className="grid h-full place-items-center px-6 text-center">
             <Wordmark className="mx-auto h-16 w-auto" />
           </div>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ClientMessage, ClientView, Intent, ServerMessage } from '@shared/types'
 import { normalizeView } from '@shared/view'
 import { joinCodeFromUrl, shouldResumeSavedRound } from '@shared/appLink'
+import { isRoundLostMessage } from '@shared/roundEnd'
 import { healthUrlFor, resolveWsUrl, SERVER_WAKE_MS, serverUrlProblem, socketRetryDelayMs, stillWithinWake } from '@shared/serverUrl'
 import { readLaunchUrl } from '@/lib/appLinks'
 import { LocalTable } from '@/lib/localTable'
@@ -18,7 +19,9 @@ export function useGame() {
   const [error, setError] = useState<string | null>(null)
   const [skew, setSkew] = useState(0)
   const [resuming, setResuming] = useState(() => shouldResumeSavedRound(location.href, loadCode(), loadName()) && Boolean(resolveWsUrl(loadServer(), isNativeApp(), location.origin)))
+  const [restarted, setRestarted] = useState(false)
   const wsRef = useRef<WebSocket | null>(null)
+  const acceptedRef = useRef(false)
   const localRef = useRef<LocalTable | null>(null)
   const modeRef = useRef<'remote' | 'local' | null>(null)
   const intentRef = useRef<Intent | null>(null)
@@ -45,6 +48,7 @@ export function useGame() {
 
   const applyServer = useCallback((message: ServerMessage) => {
     if (message.type === 'state') {
+      acceptedRef.current = true
       const view = normalizeView(message.view)
       viewRef.current = view
       setView(view)
@@ -68,6 +72,7 @@ export function useGame() {
       localRef.current?.handle(message)
       return
     }
+    if (!acceptedRef.current) return
     const socket = wsRef.current
     if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message))
   }, [])
@@ -96,6 +101,7 @@ export function useGame() {
       intentRef.current = null
       modeRef.current = null
       urlRef.current = null
+      acceptedRef.current = false
       wsRef.current?.close()
       wsRef.current = null
       stopLocal()
@@ -105,6 +111,7 @@ export function useGame() {
       setConnected(false)
       setStatus('idle')
       setResuming(false)
+      setRestarted(false)
       setError(message)
     }
 
@@ -118,7 +125,8 @@ export function useGame() {
           ? `Couldn’t rejoin ${code}. That round may have ended, or the server didn’t wake up.`
           : 'Couldn’t rejoin that round. The server didn’t wake up.')
         : 'The server didn’t wake up. Check the game server and try again.'
-      stopToHome(message, resumed)
+      // Keep the saved code. A deploy can outlast this wait, and the next open should resume.
+      stopToHome(message, false)
     }
 
     function armDeadline() {
@@ -147,6 +155,22 @@ export function useGame() {
         retryTimer.current = null
         if (gen.current === my) open()
       }, delay)
+    }
+
+    function showRestart() {
+      clearTimers()
+      closed.current = true
+      gen.current += 1
+      acceptedRef.current = false
+      intentRef.current = null
+      const socket = wsRef.current
+      wsRef.current = null
+      socket?.close()
+      setError(null)
+      setConnected(false)
+      setStatus('idle')
+      setResuming(false)
+      setRestarted(true)
     }
 
     function open() {
@@ -191,6 +215,15 @@ export function useGame() {
         } catch {
           return
         }
+        if (
+          message.type === 'error' &&
+          modeRef.current !== 'local' &&
+          (viewRef.current || intentRef.current?.kind === 'resume') &&
+          isRoundLostMessage(message.message)
+        ) {
+          showRestart()
+          return
+        }
         if (message.type === 'state' && modeRef.current === 'remote') {
           saveCode(message.view.code)
           if (wakeTimer.current != null) {
@@ -202,6 +235,7 @@ export function useGame() {
       }
       socket.onclose = () => {
         if (gen.current !== my) return
+        acceptedRef.current = false
         setConnected(false)
         if (closed.current || !intentRef.current || modeRef.current !== 'remote') return
         if (viewRef.current) {
@@ -222,6 +256,7 @@ export function useGame() {
     function begin(intent: Intent, target: string) {
       clearTimers()
       closed.current = false
+      acceptedRef.current = false
       retry.current = 0
       connectStarted.current = Date.now()
       modeRef.current = 'remote'
@@ -329,6 +364,11 @@ export function useGame() {
     connected,
     error,
     resuming,
+    restarted,
+    dismissRestart: () => {
+      setRestarted(false)
+      stopRef.current(null, true)
+    },
     send,
     leave,
     cancelConnect,
