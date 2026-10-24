@@ -192,6 +192,9 @@ export function Match({
           className={tab === 'map' ? 'absolute inset-0' : 'invisible absolute inset-0'}
           map={leafletMap}
           expandClassName="right-3 bottom-24"
+          hud={tab === 'map' ? (
+            <MapTimer view={view} headLeft={headLeft} roundLeft={roundLeft} hiding={hiding} />
+          ) : undefined}
           overlay={tab === 'map' ? (
             <>
               {locateMessage && (
@@ -256,8 +259,7 @@ export function Match({
             )}
           </div>
         ) : (
-          <div className="screen-safe pointer-events-none absolute inset-x-0 top-0 z-10">
-            {status}
+          <div className="screen-safe-x pointer-events-none absolute inset-x-0 top-[max(4.75rem,calc(env(safe-area-inset-top)+4.25rem))] z-10">
             {notices}
           </div>
         )}
@@ -403,6 +405,34 @@ export function Match({
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  )
+}
+
+function MapTimer({
+  view,
+  headLeft,
+  roundLeft,
+  hiding,
+}: {
+  view: ClientView
+  headLeft: number
+  roundLeft: number
+  hiding: boolean
+}) {
+  const role = view.you.caught ? 'Watching' : view.you.side === 'hunter' ? 'Hunter' : 'Runner'
+  const phase = view.you.caught ? 'Out' : view.phase === 'headstart' ? (hiding ? 'Hide' : 'Wait') : 'Hunt'
+  const countdown = view.phase === 'headstart' && !view.you.caught ? headLeft : roundLeft
+  return (
+    <div className="rounded-2xl border border-line/80 bg-ink/90 px-3 py-1.5 text-foam shadow-lg backdrop-blur-sm">
+      <p className="text-sm leading-tight font-medium">
+        <span className="tracking-wide uppercase">{role}</span>
+        {' '}
+        <span className="font-display text-lg leading-none">{formatClock(countdown)}</span>
+        {' · '}
+        {phase}
+      </p>
+      <p className="text-[11px] text-mist">Round {formatClock(roundLeft)}</p>
     </div>
   )
 }

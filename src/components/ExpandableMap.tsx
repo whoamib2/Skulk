@@ -8,6 +8,7 @@ export function ExpandableMap({
   className,
   map,
   overlay,
+  hud,
   expandedControls,
   expandClassName = 'top-3 right-3',
   children,
@@ -15,6 +16,8 @@ export function ExpandableMap({
   className: string
   map: LeafletMap | null
   overlay?: ReactNode
+  /** Compact overlay that stays on the map when it fills the screen. */
+  hud?: ReactNode
   expandedControls?: ReactNode
   expandClassName?: string
   children: (api: { open: boolean; expand: () => void }) => ReactNode
@@ -128,6 +131,16 @@ export function ExpandableMap({
       >
         <div className={open ? 'relative z-0 min-h-0 flex-1 isolate overflow-hidden' : 'absolute inset-0'}>
           {children({ open, expand })}
+          {hud && (
+            <div
+              data-map-timer
+              className={open
+                ? 'pointer-events-none absolute top-3 left-3 z-[1100] max-w-[calc(100%-6.5rem)]'
+                : 'pointer-events-none absolute top-[max(0.5rem,env(safe-area-inset-top))] left-[max(0.75rem,env(safe-area-inset-left))] z-[1100] max-w-[calc(100%-1.5rem-env(safe-area-inset-right))]'}
+            >
+              {hud}
+            </div>
+          )}
           {open ? (
             <button
               ref={closeRef}
