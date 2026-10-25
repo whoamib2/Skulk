@@ -2,11 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ClientMessage, ClientView, Intent, ServerMessage } from '@shared/types'
 import { normalizeView } from '@shared/view'
 import { joinCodeFromUrl, shouldResumeSavedRound } from '@shared/appLink'
+import { isProLimitMessage } from '@shared/pro'
 import { isRoundLostMessage } from '@shared/roundEnd'
 import { connectBudgetMs, healthUrlFor, resolveWsUrl, serverUrlProblem, socketRetryDelayMs, stillWithinBudget } from '@shared/serverUrl'
 import { readLaunchUrl } from '@/lib/appLinks'
 import { LocalTable } from '@/lib/localTable'
 import { isNativeApp } from '@/lib/native'
+import { currentProClaim, subscribePro } from '@/lib/proStore'
 import { clearCode, forceSim, loadCode, loadName, loadServer, playerId, saveCode, saveName } from '@/lib/session'
 
 export function useGame() {
@@ -20,6 +22,7 @@ export function useGame() {
   const [skew, setSkew] = useState(0)
   const [resuming, setResuming] = useState(() => shouldResumeSavedRound(location.href, loadCode(), loadName()) && Boolean(resolveWsUrl(loadServer(), isNativeApp(), location.origin)))
   const [restarted, setRestarted] = useState(false)
+  const [proLimit, setProLimit] = useState<string | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const acceptedRef = useRef(false)
   const localRef = useRef<LocalTable | null>(null)
@@ -57,6 +60,10 @@ export function useGame() {
       setConnected(true)
       if (view.practice) forceSim()
     } else if (message.type === 'error') {
+      if (viewRef.current && isProLimitMessage(message.message)) {
+        setProLimit(message.message)
+        return
+      }
       if (!viewRef.current && modeRef.current !== 'local') {
         stopRef.current(message.message, true)
       } else setError(message.message)
@@ -212,6 +219,7 @@ export function useGame() {
           playerId: playerId(),
           name: loadName(),
           intent,
+          pro: currentProClaim(),
         }
         socket.send(JSON.stringify(hello))
       }
@@ -349,6 +357,14 @@ export function useGame() {
     }
   }, [applyServer])
 
+  useEffect(() => subscribePro(() => {
+    if (modeRef.current === 'local' || !acceptedRef.current) return
+    const socket = wsRef.current
+    if (!socket || socket.readyState !== WebSocket.OPEN) return
+    const message: ClientMessage = { type: 'pro', pro: currentProClaim() }
+    socket.send(JSON.stringify(message))
+  }), [])
+
   function cancelConnect() {
     const inRound = viewRef.current != null
     const resumed = intentRef.current?.kind === 'resume' || inRound
@@ -376,6 +392,8 @@ export function useGame() {
     error,
     resuming,
     restarted,
+    proLimit,
+    clearProLimit: () => setProLimit(null),
     dismissRestart: () => {
       setRestarted(false)
       stopRef.current(null, true)

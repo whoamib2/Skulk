@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { destination, distanceMeters } from '../shared/geo.ts'
+import { PRO_PLAYER_MESSAGE, PRO_SETTINGS_MESSAGE } from '../shared/pro.ts'
 import { OPENING_PING_DELAY_MS } from '../shared/rules.ts'
 import { Room } from './room.ts'
 
@@ -8,7 +9,7 @@ const RUNNER = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
 const RUNNER_2 = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
 
 function lobby() {
-  const room = new Room({ code: 'ABC234', hostId: HOST, hostName: 'Ada', now: 0 })
+  const room = new Room({ code: 'ABC234', hostId: HOST, hostName: 'Ada', now: 0, hostPro: true })
   expect(room.addPlayer(RUNNER, 'Bea', 1).ok).toBe(true)
   expect(room.addPlayer(RUNNER_2, 'Cy', 2).ok).toBe(true)
   expect(room.setPreferred(HOST, 'hunter').ok).toBe(true)
@@ -241,7 +242,7 @@ describe('Room', () => {
   })
 
   it('lets a hunter tag a practice runner who is still standing on the ping', () => {
-    const room = new Room({ code: 'ABC234', hostId: HOST, hostName: 'Ada', now: 0 })
+    const room = new Room({ code: 'ABC234', hostId: HOST, hostName: 'Ada', now: 0, hostPro: true })
     expect(room.addBot(HOST, 1, 'runner').ok).toBe(true)
     expect(room.addBot(HOST, 2, 'runner').ok).toBe(true)
     expect(room.setPreferred(HOST, 'hunter').ok).toBe(true)
@@ -272,5 +273,48 @@ describe('Room', () => {
     room.start(HOST, 0)
     expect(room.endRound(HOST, 5000).ok).toBe(true)
     expect(room.view(HOST, 5000).result).toMatchObject({ winner: null, reason: 'called_off' })
+  })
+})
+
+describe('Skulk Pro on a room', () => {
+  it('keeps a free host on the free rules and a 6 player cap', () => {
+    const room = new Room({ code: 'ABC234', hostId: HOST, hostName: 'Ada', now: 0 })
+    expect(room.hostPro).toBe(false)
+    expect(room.view(HOST, 0).hostPro).toBe(false)
+    expect(room.updateSettings(HOST, { zoneRadiusM: 3000 }).ok).toBe(false)
+    expect(room.updateSettings(HOST, { zoneRadiusM: 3000 }).error).toBe(PRO_SETTINGS_MESSAGE)
+    expect(room.settings.zoneRadiusM).toBe(400)
+    expect(room.updateSettings(HOST, { durationSec: 60 }).ok).toBe(false)
+    expect(room.updateSettings(HOST, { zoneEnabled: false }).ok).toBe(false)
+    expect(room.updateSettings(HOST, { shrinkEnabled: true }).ok).toBe(false)
+    expect(room.updateSettings(HOST, { pingIntervalSec: 20 }).ok).toBe(false)
+    expect(room.updateSettings(HOST, { durationSec: 15 * 60, headStartSec: 60 }).ok).toBe(true)
+    expect(room.setZone(HOST, 41, -73).ok).toBe(true)
+    expect(room.settings.zoneLat).toBe(41)
+    expect(room.settings.zoneRadiusM).toBe(400)
+    const names = ['Bea', 'Cy', 'Dee', 'Eve', 'Fay']
+    names.forEach((name, index) => {
+      expect(room.addPlayer(`player-${index}`, name, index + 1).ok).toBe(true)
+    })
+    expect(room.addPlayer('player-extra', 'Gus', 8).ok).toBe(false)
+    expect(room.addBot(HOST, 9).error).toBe(PRO_PLAYER_MESSAGE)
+  })
+
+  it('lets a Pro host resize the circle and fill 20 seats', () => {
+    const room = new Room({ code: 'ABC234', hostId: HOST, hostName: 'Ada', now: 0, hostPro: true })
+    expect(room.updateSettings(HOST, { zoneRadiusM: 3000, durationSec: 3 * 3600, shrinkEnabled: true, pingIntervalSec: 20 }).ok).toBe(true)
+    expect(room.settings.zoneRadiusM).toBe(3000)
+    for (let index = 0; index < 19; index += 1) {
+      expect(room.addPlayer(`player-${index}`, `Name${index}`, index + 1).ok).toBe(true)
+    }
+    expect(room.addPlayer('player-extra', 'Gus', 30).error).toBe('This round is full.')
+  })
+
+  it('does not limit a practice round', () => {
+    const room = new Room({ code: 'ABC234', hostId: HOST, hostName: 'Ada', now: 0, practice: true })
+    expect(room.hostPro).toBe(false)
+    expect(room.settings.durationSec).toBe(90)
+    expect(room.updateSettings(HOST, { zoneRadiusM: 220, durationSec: 60 }).ok).toBe(true)
+    expect(room.addPlayer(RUNNER, 'Bea', 5).ok).toBe(true)
   })
 })

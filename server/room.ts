@@ -24,6 +24,13 @@ import type {
   Side,
 } from '../shared/types.ts'
 import { cleanName, cleanRadio } from '../shared/words.ts'
+import {
+  FREE_PLAYER_CAP,
+  PRO_PLAYER_CAP,
+  PRO_PLAYER_MESSAGE,
+  PRO_SETTINGS_MESSAGE,
+  isFreeSettings,
+} from '../shared/pro.ts'
 
 const BOT_NAMES = ['Juniper', 'Holt', 'Nia', 'Reed', 'Vela', 'Omar', 'Sable', 'Wynn', 'Idris', 'Pilar']
 
@@ -130,6 +137,8 @@ export interface RoomSnapshot {
   result: RoundResult | null
   endedAt: number | null
   lastHumanAt: number
+  /** Missing on snapshots saved before Skulk Pro. Those rooms load as free. */
+  hostPro?: boolean
 }
 
 export interface ActionResult {
@@ -166,6 +175,7 @@ function player(partial: Pick<Player, 'id' | 'name' | 'isHost' | 'isBot' | 'join
 export class Room {
   readonly code: string
   readonly practice: boolean
+  hostPro = false
   phase: Phase = 'lobby'
   settings: Settings
   radiusM: number
@@ -202,6 +212,7 @@ export class Room {
     hostName: string
     now: number
     practice?: boolean
+    hostPro?: boolean
     rng?: () => number
   } | {
     snapshot: RoomSnapshot
@@ -226,6 +237,7 @@ export class Room {
     }
     this.code = options.code
     this.practice = Boolean(options.practice)
+    this.hostPro = Boolean(options.hostPro)
     this.settings = defaultSettings()
     this.radiusM = this.settings.zoneRadiusM
     this.lastHumanAt = options.now
@@ -290,6 +302,7 @@ export class Room {
         : null,
       endedAt: this.endedAt,
       lastHumanAt: this.lastHumanAt,
+      hostPro: this.hostPro,
     }
   }
 
@@ -348,6 +361,7 @@ export class Room {
       left: Array.isArray(snapshot.result.left) ? [...snapshot.result.left] : [],
     } : null
     this.endedAt = finiteOrNull(snapshot.endedAt)
+    this.hostPro = snapshot.hostPro === true
     this.lastTick = 0
     this.dismissed = false
     this.dirty = false
@@ -412,7 +426,7 @@ export class Room {
     if (this.banned.has(id)) return { ok: false, error: 'You left this round.' }
     if (this.players.has(id)) return { ok: true }
     if (this.phase !== 'lobby') return { ok: false, error: 'That round has already started.' }
-    if (this.players.size >= 24) return { ok: false, error: 'This round is full.' }
+    if (this.players.size >= this.playerCap()) return { ok: false, error: 'This round is full.' }
     const clean = cleanName(name)
     if (!clean) return { ok: false, error: 'Use a name with 2–16 letters.' }
     const next = player({
@@ -434,6 +448,9 @@ export class Room {
     const host = this.players.get(hostId)
     if (!host?.isHost) return { ok: false, error: 'Only the host can add a practice player.' }
     if (this.phase !== 'lobby') return { ok: false, error: 'The round has already started.' }
+    if (!this.practice && !this.hostPro && this.players.size >= FREE_PLAYER_CAP) {
+      return { ok: false, error: PRO_PLAYER_MESSAGE }
+    }
     const name = BOT_NAMES.find((candidate) => ![...this.players.values()].some((person) => person.name === candidate))
     if (!name) return { ok: false, error: 'No more practice players.' }
     const id = `bot-${this.code}-${this.botSeq++}`
@@ -453,10 +470,26 @@ export class Room {
   updateSettings(id: string, partial: Partial<Settings>): ActionResult {
     if (!this.players.get(id)?.isHost) return { ok: false, error: 'Only the host can change the rules.' }
     if (this.phase !== 'lobby') return { ok: false, error: 'The round has already started.' }
-    this.settings = clampSettings({ ...this.settings, ...partial })
+    const next = clampSettings({ ...this.settings, ...partial })
+    if (!this.practice && !this.hostPro && !isFreeSettings(next)) {
+      return { ok: false, error: PRO_SETTINGS_MESSAGE }
+    }
+    this.settings = next
     this.radiusM = this.settings.zoneRadiusM
     this.dirty = true
     return { ok: true }
+  }
+
+  /** Upgrade a room when the host's purchase shows up. Never takes Pro away mid-round. */
+  grantHostPro(playerId: string, unlocked: boolean): void {
+    if (!unlocked || this.hostPro) return
+    if (!this.players.get(playerId)?.isHost) return
+    this.hostPro = true
+    this.dirty = true
+  }
+
+  private playerCap(): number {
+    return this.practice || this.hostPro ? PRO_PLAYER_CAP : FREE_PLAYER_CAP
   }
 
   setZone(id: string, lat: number, lng: number): ActionResult {
@@ -485,6 +518,10 @@ export class Room {
     if (!this.players.get(id)?.isHost) return { ok: false, error: 'Only the host can start.' }
     if (this.phase !== 'lobby') return { ok: false, error: 'The round has already started.' }
     const roster = this.order.map((playerId) => this.players.get(playerId)!)
+    const playing = roster.filter((person) => !person.left)
+    if (playing.length > this.playerCap()) {
+      return { ok: false, error: this.practice || this.hostPro ? 'This round is full.' : PRO_PLAYER_MESSAGE }
+    }
     const plan = planRoles(roster.map((person) => person.preferredRole))
     if (!plan.ok) return { ok: false, error: plan.reason ?? 'Roles are not ready.' }
     roster.forEach((person, index) => {
@@ -765,6 +802,7 @@ export class Room {
     return {
       code: this.code,
       practice: this.practice,
+      hostPro: this.hostPro,
       phase: this.phase,
       you: {
         id: viewer.id,

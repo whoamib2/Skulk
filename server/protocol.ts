@@ -1,3 +1,4 @@
+import type { ProClaim } from '../shared/pro.ts'
 import { isUuid } from '../shared/rules.ts'
 import type { ClientMessage, RoleChoice, Settings } from '../shared/types.ts'
 
@@ -8,6 +9,16 @@ function record(value: unknown): Record<string, unknown> | null {
   return value as Record<string, unknown>
 }
 
+function parsePro(value: unknown): ProClaim | null {
+  const raw = record(value)
+  if (!raw) return null
+  const productId = typeof raw.productId === 'string' ? raw.productId.slice(0, 64) : ''
+  const token = typeof raw.purchaseToken === 'string' ? raw.purchaseToken.trim().slice(0, 4096) : ''
+  const devUnlock = raw.devUnlock === true
+  if (!productId && !token && !devUnlock) return null
+  return { productId, purchaseToken: token || null, devUnlock }
+}
+
 export function parseMessage(raw: unknown): ClientMessage | null {
   const msg = record(raw)
   if (!msg || typeof msg.type !== 'string') return null
@@ -16,8 +27,9 @@ export function parseMessage(raw: unknown): ClientMessage | null {
     if (typeof msg.playerId !== 'string' || !isUuid(msg.playerId) || typeof msg.name !== 'string') return null
     const intent = record(msg.intent)
     if (!intent) return null
+    const pro = parsePro(msg.pro)
     if (intent.kind === 'create' && typeof intent.practice === 'boolean') {
-      return { type: 'hello', playerId: msg.playerId, name: msg.name, intent: { kind: 'create', practice: intent.practice } }
+      return { type: 'hello', playerId: msg.playerId, name: msg.name, intent: { kind: 'create', practice: intent.practice }, pro }
     }
     if ((intent.kind === 'join' || intent.kind === 'resume') && typeof intent.code === 'string') {
       return {
@@ -25,9 +37,14 @@ export function parseMessage(raw: unknown): ClientMessage | null {
         playerId: msg.playerId,
         name: msg.name,
         intent: { kind: intent.kind, code: intent.code },
+        pro,
       }
     }
     return null
+  }
+
+  if (msg.type === 'pro') {
+    return { type: 'pro', pro: parsePro(msg.pro) ?? { productId: '', purchaseToken: null, devUnlock: false } }
   }
 
   if (msg.type === 'prefs' && typeof msg.role === 'string' && ROLES.has(msg.role as RoleChoice)) {

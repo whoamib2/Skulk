@@ -1,4 +1,5 @@
 import type { WebSocket } from 'ws'
+import { resolveHostPro, type ProClaim } from '../shared/pro.ts'
 import { makeCode } from '../shared/rules.ts'
 import { ROUND_RESTARTED } from '../shared/roundEnd.ts'
 import type { ServerMessage } from '../shared/types.ts'
@@ -102,7 +103,7 @@ export class Hub {
     const message = parseMessage(parsed)
     if (!message) return
     if (message.type === 'hello') {
-      this.onHello(ws, message.playerId, message.name, message.intent)
+      this.onHello(ws, message.playerId, message.name, message.intent, message.pro ?? null)
       return
     }
     const playerId = this.socketPlayer.get(ws)
@@ -143,7 +144,11 @@ export class Hub {
       this.socketPlayer.delete(ws)
       if (room.dismissed) this.dismiss(room, 'The lobby is empty.')
       else this.push(room)
-    } else if (message.type === 'addBot') this.reply(ws, room.addBot(playerId, now), room)
+    }     else if (message.type === 'addBot') this.reply(ws, room.addBot(playerId, now), room)
+    else if (message.type === 'pro') {
+      room.grantHostPro(playerId, resolveHostPro(message.pro, process.env))
+      this.push(room)
+    }
   }
 
   private onHello(
@@ -151,6 +156,7 @@ export class Hub {
     playerId: string,
     name: string,
     intent: { kind: 'create'; practice: boolean } | { kind: 'join' | 'resume'; code: string },
+    claim: ProClaim | null,
   ): void {
     const clean = cleanName(name)
     if (!clean) {
@@ -159,7 +165,7 @@ export class Hub {
     }
     if (intent.kind === 'create') {
       this.detach(playerId, Date.now())
-      const room = this.createRoom(playerId, clean, intent.practice)
+      const room = this.createRoom(playerId, clean, intent.practice, resolveHostPro(claim, process.env))
       this.attach(ws, room, playerId)
       this.push(room)
       return
@@ -189,14 +195,15 @@ export class Hub {
       room.setName(playerId, clean)
       room.setConnected(playerId, true)
     }
+    room.grantHostPro(playerId, resolveHostPro(claim, process.env))
     this.attach(ws, room, playerId)
     this.push(room)
   }
 
-  private createRoom(hostId: string, name: string, practice: boolean): Room {
+  private createRoom(hostId: string, name: string, practice: boolean, hostPro: boolean): Room {
     let code = makeCode()
     while (this.rooms.has(code)) code = makeCode()
-    const room = new Room({ code, hostId, hostName: name, now: Date.now(), practice })
+    const room = new Room({ code, hostId, hostName: name, now: Date.now(), practice, hostPro })
     this.rooms.set(code, room)
     return room
   }

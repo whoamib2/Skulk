@@ -9,6 +9,7 @@ import { Match } from '@/components/Match'
 import { watchJoinLinks } from '@/lib/appLinks'
 import { isNativeApp } from '@/lib/native'
 import { hydrateDeviceStore } from '@/lib/deviceStore'
+import { bootPro } from '@/lib/proStore'
 import { recordFinishedRound } from '@/lib/recordRound'
 import { loadServer, loadSim, saveServer, saveSim } from '@/lib/session'
 import { useGame } from '@/lib/useGame'
@@ -34,6 +35,7 @@ export default function App() {
 
   useEffect(() => {
     void hydrateDeviceStore()
+    void bootPro()
   }, [])
 
   useEffect(() => {
@@ -149,7 +151,15 @@ export default function App() {
             onJoin={(name, code) => game.connect({ kind: 'join', code }, name)}
           />
         ) : view.phase === 'lobby' ? (
-          <Lobby view={view} now={serverNow} send={game.send} serverUrl={serverUrl} native={isNativeApp()} />
+          <Lobby
+            view={view}
+            now={serverNow}
+            send={game.send}
+            serverUrl={serverUrl}
+            native={isNativeApp()}
+            serverLimit={game.proLimit}
+            onServerLimitClear={game.clearProLimit}
+          />
         ) : view.phase === 'ended' ? (
           <GameOver view={view} now={serverNow} onDone={game.leave} />
         ) : (

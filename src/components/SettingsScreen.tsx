@@ -5,6 +5,7 @@ import { cleanEmail, cleanUsername, showUsername } from '@shared/profile'
 import { privacyPageUrl, termsPageUrl } from '@shared/serverUrl'
 import { t } from '@/lib/copy'
 import { loadBlocks, loadProfile, saveProfile, unblockPlayer, type StoredProfile } from '@/lib/deviceStore'
+import { usePro } from '@/lib/usePro'
 import { loadName, saveName } from '@/lib/session'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
@@ -26,6 +27,7 @@ export function SettingsScreen({
   const [profile, setProfile] = useState(loadProfile)
   const [blocks, setBlocks] = useState(loadBlocks)
   const [editor, setEditor] = useState<'name' | 'username' | 'email' | 'language' | null>(null)
+  const pro = usePro()
   const language = profile.language
 
   function updateProfile(next: StoredProfile) {
@@ -42,13 +44,52 @@ export function SettingsScreen({
         <button type="button" className="text-right text-base font-medium text-runner" onClick={onDone}>{t('done', language)}</button>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-4 pb-10">
+        <section className="rounded-2xl border border-line bg-panel px-4 py-4" data-pro-card>
+          <p className="text-xs tracking-[0.16em] text-mist uppercase">{t('proTitle', language)}</p>
+          <h2 className="font-display mt-1 text-2xl text-foam">{pro.owned ? t('proOwned', language) : t('proTitle', language)}</h2>
+          <p className="mt-2 text-sm text-mist">{pro.owned ? t('proJoinFree', language) : t('proBody', language)}</p>
+          {!pro.owned && (
+            <ul className="mt-3 grid gap-1 text-sm text-foam">
+              <li>{t('proPerkPlayers', language)}</li>
+              <li>{t('proPerkCircle', language)}</li>
+              <li>{t('proPerkTime', language)}</li>
+              <li>{t('proPerkHunters', language)}</li>
+            </ul>
+          )}
+          <p className="mt-3 text-sm text-mist">
+            {pro.price ? pro.price : t('proPriceLater', language)}
+          </p>
+          <p className="mt-1 text-xs text-mist">{t('hostingFree', language)} {t('proJoinFree', language)}</p>
+          {native && !pro.owned && pro.billing && (
+            <Button className="mt-4" size="lg" disabled={pro.busy} onClick={() => void pro.buy()}>{t('proGo', language)}</Button>
+          )}
+          {!native && <p className="mt-3 text-sm text-mist">{t('proWeb', language)}</p>}
+          <button
+            type="button"
+            className="mt-3 text-sm font-medium text-runner disabled:opacity-40"
+            disabled={pro.busy}
+            onClick={() => void pro.restore()}
+          >
+            {t('proRestore', language)}
+          </button>
+          {pro.note && <p className="mt-2 text-sm text-foam" data-pro-note>{pro.note}</p>}
+          {pro.debuggable && (
+            <label className="mt-4 flex items-center justify-between gap-4 border-t border-line pt-3">
+              <span>
+                <span className="block text-sm">{t('proDev', language)}</span>
+                <span className="block text-xs text-mist">{t('proDevHint', language)}</span>
+              </span>
+              <Switch checked={pro.devUnlock} onCheckedChange={pro.setDevUnlock} aria-label={t('proDev', language)} data-pro-dev="" />
+            </label>
+          )}
+        </section>
+
         <Section label={t('account', language)}>
           <Group>
             <Row label={t('name', language)} value={name || '—'} onClick={() => setEditor('name')} />
             <Row label={t('username', language)} value={showUsername(profile.username) || '—'} onClick={() => setEditor('username')} />
             <Row label={t('email', language)} value={profile.email || '—'} onClick={() => setEditor('email')} last />
           </Group>
-          <p className="mt-2 px-1 text-xs text-mist">{t('hostingFree', language)}</p>
         </Section>
 
         <Section label={t('emails', language)}>

@@ -29,7 +29,7 @@ export function privacyDocument(): string {
   <main>
     <p class="mark">Skulk</p>
     <h1>Privacy</h1>
-    <p class="updated">Updated 24 October 2026.</p>
+    <p class="updated">Updated 25 October 2026.</p>
     <p>Skulk is a game of hide-and-seek that you play on foot. There is no account to create, and there are no ads.</p>
     <h2>Location</h2>
     <p>Skulk uses your phone’s location only while you are in a round, so the map can place the play circle and follow the round’s rules. Those coordinates are sent to the game server for that round and shared with the other players in the same round. They are held in memory for the round, then dropped when the round is over and everyone has left. Skulk does not sell location, and it does not use it for advertising.</p>
@@ -41,6 +41,8 @@ export function privacyDocument(): string {
       <li>The server that hosts the round receives that information in order to run the game. The public server is the one at this site.</li>
       <li>Map tiles are loaded from OpenStreetMap so the map can draw.</li>
     </ul>
+    <h2>Skulk Pro</h2>
+    <p>Joining and playing a round is free. A host can buy a one-time Skulk Pro unlock in the Android app through Google Play. Google handles the payment. Skulk does not receive a card number. The app keeps a purchase token so the game server can tell that the host unlocked Pro. There are still no ads.</p>
     <p>Skulk does not ask for your contacts, photos, or microphone, and it does not include third-party advertising.</p>
     <p><a href="/terms">Terms of use</a> · <a href="/">Back to Skulk</a></p>
   </main>

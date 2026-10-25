@@ -1,3 +1,5 @@
+import type { ProClaim } from './pro.ts'
+
 export type Phase = 'lobby' | 'headstart' | 'hunt' | 'ended'
 export type RoleChoice = 'hunter' | 'runner' | 'random'
 export type Side = 'hunter' | 'runner'
@@ -62,6 +64,8 @@ export interface ViewMarker {
 export interface ClientView {
   code: string
   practice: boolean
+  /** True when this room's host unlocked Skulk Pro. Missing on older servers. */
+  hostPro: boolean
   phase: Phase
   you: {
     id: string
@@ -114,7 +118,8 @@ export type Intent =
   | { kind: 'resume'; code: string }
 
 export type ClientMessage =
-  | { type: 'hello'; playerId: string; name: string; intent: Intent }
+  | { type: 'hello'; playerId: string; name: string; intent: Intent; pro?: ProClaim | null }
+  | { type: 'pro'; pro: ProClaim }
   | { type: 'prefs'; role: RoleChoice }
   | { type: 'settings'; settings: Partial<Settings> }
   | { type: 'zone'; lat: number; lng: number }

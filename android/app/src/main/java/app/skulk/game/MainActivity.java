@@ -9,6 +9,7 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        registerPlugin(SkulkFlagsPlugin.class);
         super.onCreate(savedInstanceState);
         // Android 13+ WebView already walks history on back, which closes the fullscreen map.
         // Older releases finish the activity instead, so send that press through history here.

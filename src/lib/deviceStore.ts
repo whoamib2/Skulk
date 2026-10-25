@@ -1,3 +1,4 @@
+import { PRO_DEV_KEY } from '@/lib/proStore'
 import { isNativeApp } from '@/lib/native'
 import { emptyStats, type PlayerStats } from '@shared/stats'
 
@@ -48,7 +49,7 @@ async function mirror(key: string, value: string): Promise<void> {
 export async function hydrateDeviceStore(): Promise<void> {
   if (!isNativeApp()) return
   const { Preferences } = await import('@capacitor/preferences')
-  for (const key of [STATS_KEY, SEEN_KEY, PROFILE_KEY, BLOCKS_KEY]) {
+  for (const key of [STATS_KEY, SEEN_KEY, PROFILE_KEY, BLOCKS_KEY, PRO_DEV_KEY]) {
     const { value } = await Preferences.get({ key })
     if (value != null) localStorage.setItem(key, value)
   }

@@ -24,7 +24,7 @@ export function termsDocument(): string {
   <main>
     <p class="mark">Skulk</p>
     <h1>Terms of use</h1>
-    <p class="updated">Updated 24 October 2026.</p>
+    <p class="updated">Updated 25 October 2026.</p>
     <p>Skulk is a neighbourhood game of hide-and-seek. By playing, you agree to these terms.</p>
     <h2>How you play</h2>
     <ul>
@@ -33,7 +33,7 @@ export function termsDocument(): string {
       <li>Be decent on the radio. You can block someone in the lobby; their messages stay hidden from you, and the host is told.</li>
     </ul>
     <h2>Hosting</h2>
-    <p>Hosting a round is free. Skulk does not sell a hosting unlock, and there is nothing to restore.</p>
+    <p>Joining a round is free, and hosting a free round is free. Skulk Pro is an optional one-time unlock in the Android app for hosts who want a bigger round and extra options. Invited players are not asked to pay. Google Play handles the payment. You can restore a purchase from Settings.</p>
     <h2>Your information</h2>
     <p>Location is used only during a round and shared with the players in that round. There is no account. The privacy policy at <a href="/privacy">/privacy</a> says what stays on your device.</p>
     <h2>The game can change</h2>

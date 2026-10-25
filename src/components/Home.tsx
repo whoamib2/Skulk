@@ -142,7 +142,7 @@ export function Home({
         <Switch checked={sim} onCheckedChange={onSim} aria-label="On-screen movement" />
       </label>
       <ol className="mt-8 grid gap-4 text-sm">
-        <Step n="1" title="Set the circle" body="The host drops a circle on the map, from a couple of blocks out to 3 km, and shares a six-character code." />
+        <Step n="1" title="Set the circle" body="The host drops a circle on the map and shares a six-character code. A free round uses a 400 m circle." />
         <Step n="2" title="Pick a side" body="Hunter, runner, or random. Random fills whichever side is short. A round needs three players and never more hunters than runners." />
         <Step n="3" title="Scatter" body="Runners get a head start inside the circle. Hunters wait. No snapshots yet." />
         <Step n="4" title="Hunt by memory" body="Each ping shows where a runner was, and how long ago. Tag in person, within 15 m. They confirm. If anyone is still free at the end, the runners win." />
@@ -215,7 +215,7 @@ export function Home({
             <li>Runners who are still in never see hunters.</li>
             <li>Stay outside the circle for 30 seconds and hunters can see you live until you’re back in.</li>
             <li>A tag counts inside 15 m. The runner confirms it, then watches the rest a minute behind, live, or not at all.</li>
-            <li>The host can close the circle on a timer. There’s a warning before each shrink.</li>
+            <li>With Skulk Pro, the host can close the circle on a timer. There’s a warning before each shrink.</li>
             <li>Radio is only for your side. The other team never reads it.</li>
           </ul>
         </DialogContent>

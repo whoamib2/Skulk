@@ -4,9 +4,19 @@ import { Check, Copy, Loader2, Plus, X } from 'lucide-react'
 import { boundsFromRadius } from '@shared/geo'
 import { formatDuration } from '@shared/format'
 import { lobbyFallbackMessage, locateProblemMessage } from '@shared/locate'
-import { describeZone } from '@shared/rules'
+import {
+  FREE_PLAYER_CAP,
+  FREE_RADIUS_M,
+  PRO_PLAYER_CAP,
+  PRO_PLAYER_MESSAGE,
+  durationIsPro,
+  headIsPro,
+  isFreeSettings,
+  pingIsPro,
+} from '@shared/pro'
+import { clampSettings, describeZone } from '@shared/rules'
 import { publicJoinUrl } from '@shared/serverUrl'
-import type { ClientMessage, ClientView, RoleChoice } from '@shared/types'
+import type { ClientMessage, ClientView, RoleChoice, Settings } from '@shared/types'
 import { ExpandableMap } from '@/components/ExpandableMap'
 import { FindMeButton } from '@/components/FindMeButton'
 import { MapCanvas } from '@/components/MapCanvas'
@@ -17,14 +27,16 @@ import { Switch } from '@/components/ui/switch'
 import { t } from '@/lib/copy'
 import { blockPlayer, loadBlocks, unblockPlayer } from '@/lib/deviceStore'
 import { locateOnce } from '@/lib/locate'
+import { usePro } from '@/lib/usePro'
 
 const DURATIONS = [
+  ['15 min', 15 * 60],
+  ['30 min', 30 * 60],
+  ['45 min', 45 * 60],
   ['1 min', 60],
-  ['10 min', 600],
-  ['20 min', 1200],
-  ['45 min', 2700],
-  ['90 min', 5400],
-  ['3 h', 10800],
+  ['60 min', 60 * 60],
+  ['90 min', 90 * 60],
+  ['3 h', 3 * 3600],
 ] as const
 
 const HEADS = [
@@ -57,18 +69,51 @@ const SHRINKS = [
   ['15 min', 900],
 ] as const
 
+type UpsellKind = 'players' | 'time' | 'sprint' | 'circle' | 'hunters' | 'generic'
+
+const UPSELL: Record<UpsellKind, { title: string; body: string }> = {
+  players: {
+    title: 'Bigger rounds are in Skulk Pro',
+    body: `A free round fits ${FREE_PLAYER_CAP} players, including you. Skulk Pro fits ${PRO_PLAYER_CAP}. Joining a round stays free.`,
+  },
+  time: {
+    title: 'That clock is in Skulk Pro',
+    body: 'Free rounds are 15, 30, or 45 minutes, with a head start of none, 1 minute, or 3. Skulk Pro opens the other clocks.',
+  },
+  sprint: {
+    title: 'Sprint is in Skulk Pro',
+    body: 'Sprint is a one-minute round with a short head start, fast pings, and a smaller circle. Classic stays free.',
+  },
+  circle: {
+    title: 'A custom circle is in Skulk Pro',
+    body: `The free circle stays on, at ${FREE_RADIUS_M} meters. You can still drag it to wherever you are playing. Skulk Pro can resize it, turn it off, or let it close.`,
+  },
+  hunters: {
+    title: 'That hunter tool is in Skulk Pro',
+    body: 'Free hunters get a ping every 5 minutes. Skulk Pro can ping sooner, turn pings off, or close the circle.',
+  },
+  generic: {
+    title: 'That option is in Skulk Pro',
+    body: 'Joining and playing stay free. Skulk Pro is a one-time unlock for the host.',
+  },
+}
+
 export function Lobby({
   view,
   now,
   send,
   serverUrl,
   native,
+  serverLimit,
+  onServerLimitClear,
 }: {
   view: ClientView
   now: number
   send: (message: ClientMessage) => void
   serverUrl: string
   native: boolean
+  serverLimit: string | null
+  onServerLimitClear: () => void
 }) {
   const [copied, setCopied] = useState(false)
   const [dragRadius, setDragRadius] = useState<number | null>(null)
@@ -78,6 +123,14 @@ export function Lobby({
   const [locateMessage, setLocateMessage] = useState<string | null>(null)
   const [mapReady, setMapReady] = useState(!view.you.isHost)
   const [pendingId, setPendingId] = useState<string | null>(null)
+  const [localUpsell, setLocalUpsell] = useState<UpsellKind | null>(null)
+  const [seenLimit, setSeenLimit] = useState<string | null>(null)
+  const pro = usePro()
+  const locked = view.you.isHost && !view.practice && !pro.owned
+  const serverKind: UpsellKind | null = serverLimit && serverLimit !== seenLimit && view.you.isHost && !view.practice
+    ? (serverLimit === PRO_PLAYER_MESSAGE ? 'players' : 'generic')
+    : null
+  const upsell = pro.owned ? null : (localUpsell ?? serverKind)
   const blockSync = useRef(new Set<string>())
   const radius = dragRadius ?? view.settings.zoneRadiusM
   const pending = view.roster.find((person) => person.id === pendingId && !person.isYou) ?? null
@@ -157,8 +210,19 @@ export function Lobby({
     map?.flyTo([result.lat, result.lng], Math.max(map.getZoom(), 16), { duration: 0.75 })
   }
 
-  function patch(settings: ClientMessage & { type: 'settings' }) {
-    send(settings)
+  function closeUpsell() {
+    setLocalUpsell(null)
+    if (serverLimit) setSeenLimit(serverLimit)
+    onServerLimitClear()
+  }
+
+  function commit(partial: Partial<Settings>, kind: UpsellKind) {
+    setDragRadius(null)
+    if (locked && !isFreeSettings(clampSettings({ ...view.settings, ...partial }))) {
+      setLocalUpsell(kind)
+      return
+    }
+    send({ type: 'settings', settings: partial })
   }
 
   return (
@@ -207,11 +271,7 @@ export function Lobby({
                     step={10}
                     value={[radius]}
                     onValueChange={(value) => setDragRadius(value[0] ?? radius)}
-                    onValueCommit={(value) => {
-                      const next = value[0] ?? radius
-                      setDragRadius(null)
-                      patch({ type: 'settings', settings: { zoneRadiusM: next } })
-                    }}
+                    onValueCommit={(value) => commit({ zoneRadiusM: value[0] ?? radius }, 'circle')}
                   />
                 )}
               </div>
@@ -280,7 +340,17 @@ export function Lobby({
           <div className="flex items-center justify-between">
             <h2 className="text-sm text-mist">Players · {view.roster.length}</h2>
             {view.you.isHost && (
-              <button type="button" className="flex items-center gap-1 text-sm text-foam" onClick={() => send({ type: 'addBot' })}>
+              <button
+                type="button"
+                className="flex items-center gap-1 text-sm text-foam"
+                onClick={() => {
+                  if (locked && view.roster.length >= FREE_PLAYER_CAP) {
+                    setLocalUpsell('players')
+                    return
+                  }
+                  send({ type: 'addBot' })
+                }}
+              >
                 <Plus className="size-4" /> Practice player
               </button>
             )}
@@ -309,6 +379,9 @@ export function Lobby({
             ))}
           </ul>
           <p className="mt-2 text-xs text-mist">Tap a player to block them. Their radio stays hidden from you, and the host is told.</p>
+          {locked && (
+            <p className="mt-1 text-xs text-mist">A free round fits {FREE_PLAYER_CAP} players. Skulk Pro fits {PRO_PLAYER_CAP}.</p>
+          )}
         </section>
 
         <section className="mt-5">
@@ -318,29 +391,29 @@ export function Lobby({
               <div className="flex gap-2">
                 <Button
                   variant="secondary"
-                  onClick={() => patch({ type: 'settings', settings: { durationSec: 60, headStartSec: 15, pingIntervalSec: 20, zoneRadiusM: 220 } })}
+                  onClick={() => commit({ durationSec: 60, headStartSec: 15, pingIntervalSec: 20, zoneRadiusM: 220 }, 'sprint')}
                 >
-                  Sprint
+                  {locked ? 'Sprint · Pro' : 'Sprint'}
                 </Button>
                 <Button
                   variant="secondary"
-                  onClick={() => patch({ type: 'settings', settings: { durationSec: 45 * 60, headStartSec: 3 * 60, pingIntervalSec: 5 * 60, zoneRadiusM: 400, shrinkEnabled: false, spectator: 'delayed' } })}
+                  onClick={() => commit({ durationSec: 45 * 60, headStartSec: 3 * 60, pingIntervalSec: 5 * 60, zoneRadiusM: 400, shrinkEnabled: false, spectator: 'delayed' }, 'generic')}
                 >
                   Classic
                 </Button>
               </div>
               <Field label="Round length">
-                <Chips options={DURATIONS} value={view.settings.durationSec} onPick={(durationSec) => patch({ type: 'settings', settings: { durationSec } })} />
+                <Chips options={DURATIONS} value={view.settings.durationSec} locked={locked} proOption={durationIsPro} onPick={(durationSec) => commit({ durationSec }, 'time')} />
               </Field>
               <Field label="Head start">
-                <Chips options={HEADS} value={view.settings.headStartSec} onPick={(headStartSec) => patch({ type: 'settings', settings: { headStartSec } })} />
+                <Chips options={HEADS} value={view.settings.headStartSec} locked={locked} proOption={headIsPro} onPick={(headStartSec) => commit({ headStartSec }, 'time')} />
               </Field>
               <Field label="Ping every">
-                <Chips options={PINGS} value={view.settings.pingIntervalSec} onPick={(pingIntervalSec) => patch({ type: 'settings', settings: { pingIntervalSec } })} />
+                <Chips options={PINGS} value={view.settings.pingIntervalSec} locked={locked} proOption={pingIsPro} onPick={(pingIntervalSec) => commit({ pingIntervalSec }, 'hunters')} />
               </Field>
               <label className="flex items-center justify-between gap-3">
                 <span className="text-sm">Play circle</span>
-                <Switch checked={view.settings.zoneEnabled} onCheckedChange={(zoneEnabled) => patch({ type: 'settings', settings: { zoneEnabled } })} aria-label="Play circle" />
+                <Switch checked={view.settings.zoneEnabled} onCheckedChange={(zoneEnabled) => commit({ zoneEnabled }, 'circle')} aria-label="Play circle" />
               </label>
               {view.settings.zoneEnabled && (
                 <Field label={`Size · ${describeZone(radius, true)}`}>
@@ -350,11 +423,7 @@ export function Lobby({
                     step={10}
                     value={[radius]}
                     onValueChange={(value) => setDragRadius(value[0] ?? radius)}
-                    onValueCommit={(value) => {
-                      const next = value[0] ?? radius
-                      setDragRadius(null)
-                      patch({ type: 'settings', settings: { zoneRadiusM: next } })
-                    }}
+                    onValueCommit={(value) => commit({ zoneRadiusM: value[0] ?? radius }, 'circle')}
                   />
                 </Field>
               )}
@@ -362,7 +431,9 @@ export function Lobby({
                 <Chips
                   options={SHRINKS}
                   value={view.settings.shrinkEnabled ? view.settings.shrinkEverySec : 0}
-                  onPick={(every) => patch({ type: 'settings', settings: { shrinkEnabled: every > 0, shrinkEverySec: every || view.settings.shrinkEverySec } })}
+                  locked={locked}
+                  proOption={(every) => every > 0}
+                  onPick={(every) => commit({ shrinkEnabled: every > 0, shrinkEverySec: every || view.settings.shrinkEverySec }, 'hunters')}
                 />
                 <p className="text-xs text-mist">Each close tightens the circle to 75%, with a warning before it moves.</p>
               </Field>
@@ -378,7 +449,7 @@ export function Lobby({
                       type="button"
                       className="chip"
                       aria-pressed={view.settings.spectator === value}
-                      onClick={() => patch({ type: 'settings', settings: { spectator: value } })}
+                      onClick={() => commit({ spectator: value }, 'generic')}
                     >
                       {label}
                     </button>
@@ -417,6 +488,22 @@ export function Lobby({
             <Button variant="secondary" size="lg" onClick={() => setPendingId(null)}>{t('cancel')}</Button>
             <Button size="lg" onClick={confirmBlock}>{pending?.blockedByYou ? t('unblock') : t('block')}</Button>
           </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={upsell != null} onOpenChange={(open) => { if (!open) closeUpsell() }}>
+        <DialogContent data-upsell={upsell ?? 'closed'}>
+          <DialogTitle>{upsell ? UPSELL[upsell].title : 'Skulk Pro'}</DialogTitle>
+          <DialogDescription>{upsell ? UPSELL[upsell].body : ''}</DialogDescription>
+          {pro.price && <p className="mt-3 text-sm text-mist">Google Play lists it at {pro.price}.</p>}
+          <div className={`mt-5 grid gap-2 ${pro.billing && !pro.owned ? 'grid-cols-2' : ''}`}>
+            <Button variant="secondary" size="lg" onClick={closeUpsell}>Not now</Button>
+            {pro.billing && !pro.owned && (
+              <Button size="lg" disabled={pro.busy} onClick={() => void pro.buy()}>Go Pro</Button>
+            )}
+          </div>
+          {!pro.billing && (
+            <p className="mt-3 text-sm text-mist">You can unlock it in the Android app. Invited players never need to.</p>
+          )}
         </DialogContent>
       </Dialog>
     </div>
@@ -461,12 +548,24 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
-function Chips({ options, value, onPick }: { options: readonly (readonly [string, number])[]; value: number; onPick: (value: number) => void }) {
+function Chips({
+  options,
+  value,
+  onPick,
+  locked = false,
+  proOption,
+}: {
+  options: readonly (readonly [string, number])[]
+  value: number
+  onPick: (value: number) => void
+  locked?: boolean
+  proOption?: (value: number) => boolean
+}) {
   return (
     <div className="chip-row">
       {options.map(([label, option]) => (
         <button key={label} type="button" className="chip" aria-pressed={value === option} onClick={() => onPick(option)}>
-          {label}
+          {locked && proOption?.(option) ? `${label} · Pro` : label}
         </button>
       ))}
     </div>

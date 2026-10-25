@@ -1,5 +1,6 @@
 import { distanceMeters } from './geo.ts'
 import { zonePhrase } from './format.ts'
+import { PRO_PLAYER_CAP } from './pro.ts'
 import type { RoleChoice, Settings, Side, ViewMarker } from './types.ts'
 
 export const TAG_RADIUS_M = 15
@@ -90,8 +91,8 @@ export function planRoles(preferred: RoleChoice[]): RolePlan {
   if (n < 3) {
     return { ok: false, reason: 'Need at least 3 players.', warning: null, roles: none }
   }
-  if (n > 24) {
-    return { ok: false, reason: '24 players is the limit.', warning: null, roles: none }
+  if (n > PRO_PLAYER_CAP) {
+    return { ok: false, reason: `${PRO_PLAYER_CAP} players is the limit.`, warning: null, roles: none }
   }
 
   const minH = Math.max(1, Math.ceil(n / 10))

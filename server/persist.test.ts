@@ -1,5 +1,6 @@
 import type { WebSocket } from 'ws'
 import { describe, expect, it } from 'vitest'
+import { PRO_PRODUCT_ID, PRO_SETTINGS_MESSAGE } from '../shared/pro.ts'
 import { ROUND_RESTARTED } from '../shared/roundEnd.ts'
 import type { ClientView, ServerMessage } from '../shared/types.ts'
 import { Hub } from './hub.ts'
@@ -57,7 +58,7 @@ function lastMessage(socket: FakeSocket): ServerMessage {
 
 describe('room snapshots', () => {
   it('round-trips a live round without keeping players marked connected', () => {
-    const room = new Room({ code: 'ABC234', hostId: HOST, hostName: 'Ada', now: 1_000 })
+    const room = new Room({ code: 'ABC234', hostId: HOST, hostName: 'Ada', now: 1_000, hostPro: true })
     expect(room.addPlayer(RUNNER, 'Bea', 1_100).ok).toBe(true)
     expect(room.addPlayer(RUNNER_2, 'Cy', 1_200).ok).toBe(true)
     expect(room.setPreferred(HOST, 'hunter').ok).toBe(true)
@@ -95,6 +96,11 @@ describe('room snapshots', () => {
     expect(runner.you.connected).toBe(false)
     expect(restored.view(HOST, 9_000).you.connected).toBe(false)
     expect(runner.roster.find((person) => person.id === HOST)?.blockedByYou).toBe(true)
+    expect(snapshot.hostPro).toBe(true)
+    expect(restored.hostPro).toBe(true)
+    const legacy = JSON.parse(JSON.stringify(snapshot)) as RoomSnapshot
+    delete legacy.hostPro
+    expect(new Room({ snapshot: legacy }).hostPro).toBe(false)
   })
 })
 
@@ -123,7 +129,7 @@ describe('hub persistence', () => {
     host.receive(JSON.stringify({ type: 'prefs', role: 'hunter' }))
     bea.receive(JSON.stringify({ type: 'prefs', role: 'runner' }))
     cy.receive(JSON.stringify({ type: 'prefs', role: 'runner' }))
-    host.receive(JSON.stringify({ type: 'settings', settings: { headStartSec: 30, durationSec: 600, zoneLat: 40.7, zoneLng: -74, zoneRadiusM: 400 } }))
+    host.receive(JSON.stringify({ type: 'settings', settings: { headStartSec: 180, durationSec: 900, zoneLat: 40.7, zoneLng: -74, zoneRadiusM: 400 } }))
     host.receive(JSON.stringify({ type: 'start' }))
     bea.receive(JSON.stringify({ type: 'location', lat: 40.701, lng: -74.001, accuracy: 6 }))
     expect(viewOf(bea).you.side).toBe('runner')
@@ -188,5 +194,52 @@ describe('hub persistence', () => {
     const again = connect(restarted)
     hello(again, HOST, 'Ada', { kind: 'resume', code })
     expect(lastMessage(again)).toEqual({ type: 'error', message: ROUND_RESTARTED })
+  })
+
+  it('accepts a purchase token on create and ignores a dev unlock unless the server flag is set', () => {
+    const previousDev = process.env.SKULK_PRO_DEV
+    const previousVerify = process.env.SKULK_PLAY_VERIFY
+    delete process.env.SKULK_PRO_DEV
+    delete process.env.SKULK_PLAY_VERIFY
+    try {
+      const hub = new Hub()
+      const locked = connect(hub)
+      locked.receive(JSON.stringify({
+        type: 'hello',
+        playerId: HOST,
+        name: 'Ada',
+        intent: { kind: 'create', practice: false },
+        pro: { productId: PRO_PRODUCT_ID, purchaseToken: null, devUnlock: true },
+      }))
+      expect(viewOf(locked).hostPro).toBe(false)
+      locked.receive(JSON.stringify({ type: 'settings', settings: { zoneRadiusM: 1500 } }))
+      expect(locked.sent.some((raw) => raw.includes(PRO_SETTINGS_MESSAGE))).toBe(true)
+      expect(viewOf(locked).settings.zoneRadiusM).toBe(400)
+
+      process.env.SKULK_PRO_DEV = '1'
+      locked.receive(JSON.stringify({
+        type: 'pro',
+        pro: { productId: PRO_PRODUCT_ID, purchaseToken: null, devUnlock: true },
+      }))
+      expect(viewOf(locked).hostPro).toBe(true)
+      locked.receive(JSON.stringify({ type: 'settings', settings: { zoneRadiusM: 1500 } }))
+      expect(viewOf(locked).settings.zoneRadiusM).toBe(1500)
+
+      delete process.env.SKULK_PRO_DEV
+      const bought = connect(new Hub())
+      bought.receive(JSON.stringify({
+        type: 'hello',
+        playerId: HOST,
+        name: 'Ada',
+        intent: { kind: 'create', practice: false },
+        pro: { productId: PRO_PRODUCT_ID, purchaseToken: 'play-token', devUnlock: false },
+      }))
+      expect(viewOf(bought).hostPro).toBe(true)
+    } finally {
+      if (previousDev === undefined) delete process.env.SKULK_PRO_DEV
+      else process.env.SKULK_PRO_DEV = previousDev
+      if (previousVerify === undefined) delete process.env.SKULK_PLAY_VERIFY
+      else process.env.SKULK_PLAY_VERIFY = previousVerify
+    }
   })
 })

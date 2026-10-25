@@ -33,6 +33,7 @@ export function normalizeView(input: ClientView): ClientView {
       distanceM: num(you?.distanceM),
       runSec: num(you?.runSec),
     },
+    hostPro: input.hostPro === true,
     roster: Array.isArray(input.roster) ? input.roster.map((person) => rosterEntry(person)) : [],
     canStart: input.canStart ?? { ok: false, reason: null, warning: null },
   }
