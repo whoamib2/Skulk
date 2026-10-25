@@ -1,5 +1,5 @@
 import type { WebSocket } from 'ws'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { PRO_PRODUCT_ID, PRO_SETTINGS_MESSAGE } from '../shared/pro.ts'
 import { ROUND_RESTARTED } from '../shared/roundEnd.ts'
 import type { ClientView, ServerMessage } from '../shared/types.ts'
@@ -240,6 +240,85 @@ describe('hub persistence', () => {
       else process.env.SKULK_PRO_DEV = previousDev
       if (previousVerify === undefined) delete process.env.SKULK_PLAY_VERIFY
       else process.env.SKULK_PLAY_VERIFY = previousVerify
+    }
+  })
+
+  it('fans movement out about once a second and still sends a phase change inside that window', async () => {
+    const hub = new Hub()
+    const host = connect(hub)
+    host.receive(JSON.stringify({
+      type: 'hello',
+      playerId: HOST,
+      name: 'Ada',
+      intent: { kind: 'create', practice: false },
+      pro: { productId: PRO_PRODUCT_ID, purchaseToken: 'play-token', devUnlock: false },
+    }))
+    const code = viewOf(host).code
+    const bea = connect(hub)
+    const cy = connect(hub)
+    hello(bea, RUNNER, 'Bea', { kind: 'join', code })
+    hello(cy, RUNNER_2, 'Cy', { kind: 'join', code })
+    host.receive(JSON.stringify({ type: 'prefs', role: 'hunter' }))
+    bea.receive(JSON.stringify({ type: 'prefs', role: 'runner' }))
+    cy.receive(JSON.stringify({ type: 'prefs', role: 'runner' }))
+    host.receive(JSON.stringify({
+      type: 'settings',
+      settings: {
+        headStartSec: 1,
+        durationSec: 900,
+        pingIntervalSec: 0,
+        zoneLat: 40.6602,
+        zoneLng: -73.969,
+        zoneRadiusM: 400,
+        shrinkEnabled: false,
+      },
+    }))
+    host.receive(JSON.stringify({ type: 'start' }))
+    const afterStart = host.sent.length
+    const endsAt = viewOf(host).clock.headStartEndsAt
+    expect(viewOf(host).phase).toBe('headstart')
+    expect(endsAt).not.toBeNull()
+
+    host.receive(JSON.stringify({ type: 'location', lat: 40.6604, lng: -73.969, accuracy: 5 }))
+    await new Promise((resolve) => setTimeout(resolve, 90))
+    host.receive(JSON.stringify({ type: 'location', lat: 40.661, lng: -73.969, accuracy: 5 }))
+    hub.tick(Date.now())
+    expect(host.sent.length).toBe(afterStart)
+
+    host.receive(JSON.stringify({ type: 'radio', text: 'On my way' }))
+    expect(host.sent.length).toBe(afterStart + 1)
+    expect(viewOf(host).you.lat).toBeCloseTo(40.661, 4)
+    const radioAt = Date.now()
+    expect(endsAt!).toBeGreaterThan(radioAt)
+    expect(endsAt! - radioAt).toBeLessThan(1000)
+
+    const afterRadio = host.sent.length
+    await new Promise((resolve) => setTimeout(resolve, 90))
+    host.receive(JSON.stringify({ type: 'location', lat: 40.662, lng: -73.969, accuracy: 5 }))
+    hub.tick(Date.now())
+    expect(host.sent.length).toBe(afterRadio)
+
+    hub.tick(endsAt!)
+    expect(host.sent.length).toBe(afterRadio + 1)
+    expect(viewOf(host).phase).toBe('hunt')
+    expect(viewOf(host).you.lat).toBeCloseTo(40.662, 4)
+  })
+
+  it('does not postpone a scheduled save when the round keeps updating', async () => {
+    vi.useFakeTimers()
+    try {
+      const store = memoryRoomStore()
+      const hub = new Hub(store, 200)
+      const host = connect(hub)
+      hello(host, HOST, 'Ada', { kind: 'create', practice: false })
+      const code = viewOf(host).code
+      await vi.advanceTimersByTimeAsync(120)
+      host.receive(JSON.stringify({ type: 'prefs', role: 'hunter' }))
+      await vi.advanceTimersByTimeAsync(100)
+      const snapshot = (await store.load()).find((item) => item.code === code)
+      expect(snapshot?.players.find((person) => person.id === HOST)?.preferredRole).toBe('hunter')
+    } finally {
+      vi.useRealTimers()
     }
   })
 })

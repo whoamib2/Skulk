@@ -32,7 +32,7 @@ export const locale = {
     proWeb: 'You can unlock Skulk Pro in the Android app. This page can’t take a payment.',
     proDev: 'Unlock Pro for testing',
     proDevHint: 'Debug builds only. It does not charge anything, and the public server ignores it.',
-    proPerkPlayers: 'Up to 20 players. A free round fits 6.',
+    proPerkPlayers: 'Up to 30 players. A free round fits 6.',
     proPerkCircle: 'Resize the circle, turn it off, or let it close. Free stays at 400 m.',
     proPerkTime: 'More round lengths and head starts. Free keeps 15, 30, and 45 minutes.',
     proPerkHunters: 'Faster pings, or a closing circle. Free hunters ping every 5 minutes.',

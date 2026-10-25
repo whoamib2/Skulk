@@ -6,6 +6,8 @@ import type { RoleChoice, Settings, Side, ViewMarker } from './types.ts'
 export const TAG_RADIUS_M = 15
 export const OOB_GRACE_MS = 30_000
 export const OPENING_PING_DELAY_MS = 1000
+/** How often a moving player is broadcast. Phase changes and other events are not held this long. */
+export const MOVEMENT_BROADCAST_MS = 1000
 export const MIN_RADIUS_M = 80
 export const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 export const DEFAULT_CENTER = { lat: 40.6602, lng: -73.969 }

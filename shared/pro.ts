@@ -6,7 +6,7 @@ export const PRO_PRODUCT_ID = 'skulk_pro'
 /** Players in a free round, including the host and practice players. */
 export const FREE_PLAYER_CAP = 6
 /** Players in a Pro round, including the host. */
-export const PRO_PLAYER_CAP = 20
+export const PRO_PLAYER_CAP = 30
 
 /** 15, 30, and 45 minutes. The classic 45-minute round stays free. */
 export const FREE_DURATIONS_SEC = [15 * 60, 30 * 60, 45 * 60] as const
@@ -18,7 +18,7 @@ export const FREE_PING_SEC = 5 * 60
 export const FREE_RADIUS_M = 400
 
 export const PRO_SETTINGS_MESSAGE = 'That option is part of Skulk Pro.'
-export const PRO_PLAYER_MESSAGE = 'Free rounds hold 6 players. Skulk Pro holds 20.'
+export const PRO_PLAYER_MESSAGE = `Free rounds hold ${FREE_PLAYER_CAP} players. Skulk Pro holds ${PRO_PLAYER_CAP}.`
 
 export interface ProClaim {
   productId: string

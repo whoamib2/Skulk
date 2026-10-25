@@ -27,7 +27,9 @@ describe('Skulk Pro limits', () => {
     expect(isFreeSettings(practiceSettings(settings))).toBe(false)
   })
 
-  it('caps a round at 20 players', () => {
+  it('caps a round at 30 players', () => {
+    expect(PRO_PLAYER_CAP).toBe(30)
+    expect(FREE_PLAYER_CAP).toBe(6)
     const over = planRoles(Array.from({ length: PRO_PLAYER_CAP + 1 }, () => 'random' as const))
     expect(over.ok).toBe(false)
     expect(over.reason).toBe(`${PRO_PLAYER_CAP} players is the limit.`)
@@ -64,6 +66,7 @@ describe('Skulk Pro limits', () => {
     const copy = readFileSync(new URL('../src/lib/copy.ts', import.meta.url), 'utf8')
     expect(copy).toContain("proGo: 'Go Pro'")
     expect(copy).toContain("proRestore: 'Restore purchase'")
+    expect(copy).toContain("proPerkPlayers: 'Up to 30 players. A free round fits 6.'")
     const lobby = readFileSync(new URL('../src/components/Lobby.tsx', import.meta.url), 'utf8')
     expect(lobby).toContain('data-upsell')
     expect(lobby).toContain('view.you.isHost && !view.practice && !pro.owned')

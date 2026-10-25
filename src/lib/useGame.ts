@@ -5,6 +5,7 @@ import { joinCodeFromUrl, shouldResumeSavedRound } from '@shared/appLink'
 import { isProLimitMessage } from '@shared/pro'
 import { isRoundLostMessage } from '@shared/roundEnd'
 import { connectBudgetMs, healthUrlFor, resolveWsUrl, serverUrlProblem, socketRetryDelayMs, stillWithinBudget } from '@shared/serverUrl'
+import { MOVEMENT_BROADCAST_MS } from '@shared/rules'
 import { readLaunchUrl } from '@/lib/appLinks'
 import { LocalTable } from '@/lib/localTable'
 import { isNativeApp } from '@/lib/native'
@@ -36,6 +37,9 @@ export function useGame() {
   const connectStarted = useRef(0)
   const wakeTimer = useRef<number | null>(null)
   const retryTimer = useRef<number | null>(null)
+  const locationTimer = useRef<number | null>(null)
+  const pendingLocation = useRef<ClientMessage | null>(null)
+  const lastLocationSent = useRef(0)
   const connectRef = useRef<(intent: Intent, name: string) => void>(() => {})
   const stopRef = useRef<(message: string | null, clearSession: boolean) => void>(() => {})
 
@@ -74,15 +78,46 @@ export function useGame() {
     }
   }, [])
 
-  const send = useCallback((message: ClientMessage) => {
+  const deliver = useCallback((message: ClientMessage): boolean => {
     if (modeRef.current === 'local') {
       localRef.current?.handle(message)
+      return true
+    }
+    if (!acceptedRef.current) return false
+    const socket = wsRef.current
+    if (!socket || socket.readyState !== WebSocket.OPEN) return false
+    socket.send(JSON.stringify(message))
+    return true
+  }, [])
+
+  const send = useCallback((message: ClientMessage) => {
+    if (message.type !== 'location') {
+      deliver(message)
       return
     }
-    if (!acceptedRef.current) return
-    const socket = wsRef.current
-    if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message))
-  }, [])
+    // GPS and the sim can fire many times a second. Keep the newest point and send about once a second.
+    pendingLocation.current = message
+    const elapsed = Date.now() - lastLocationSent.current
+    if (elapsed >= MOVEMENT_BROADCAST_MS) {
+      if (locationTimer.current != null) {
+        window.clearTimeout(locationTimer.current)
+        locationTimer.current = null
+      }
+      if (!deliver(message)) return
+      pendingLocation.current = null
+      lastLocationSent.current = Date.now()
+      return
+    }
+    if (locationTimer.current != null) return
+    locationTimer.current = window.setTimeout(() => {
+      locationTimer.current = null
+      const pending = pendingLocation.current
+      if (!pending) return
+      if (!deliver(pending)) return
+      pendingLocation.current = null
+      lastLocationSent.current = Date.now()
+    }, MOVEMENT_BROADCAST_MS - elapsed)
+  }, [deliver])
 
   useEffect(() => {
     function clearTimers() {
@@ -94,6 +129,11 @@ export function useGame() {
         window.clearTimeout(retryTimer.current)
         retryTimer.current = null
       }
+      if (locationTimer.current != null) {
+        window.clearTimeout(locationTimer.current)
+        locationTimer.current = null
+      }
+      pendingLocation.current = null
     }
 
     function stopLocal() {

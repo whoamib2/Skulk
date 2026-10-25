@@ -181,6 +181,8 @@ export class Room {
   radiusM: number
   dismissed = false
   dirty = false
+  /** Set when an event should leave on the next tick, ahead of the movement interval. */
+  urgent = false
 
   private readonly players = new Map<string, Player>()
   private order: string[] = []
@@ -402,6 +404,7 @@ export class Room {
   consumeDirty(): boolean {
     const dirty = this.dirty
     this.dirty = false
+    this.urgent = false
     return dirty
   }
 
@@ -1222,6 +1225,7 @@ export class Room {
     this.events.push({ id: `e${this.seq++}`, at: now, text, tone, audience })
     if (this.events.length > 80) this.events.splice(0, this.events.length - 80)
     this.dirty = true
+    this.urgent = true
   }
 }
 

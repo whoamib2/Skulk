@@ -1,6 +1,6 @@
 import type { WebSocket } from 'ws'
 import { resolveHostPro, type ProClaim } from '../shared/pro.ts'
-import { makeCode } from '../shared/rules.ts'
+import { makeCode, MOVEMENT_BROADCAST_MS } from '../shared/rules.ts'
 import { ROUND_RESTARTED } from '../shared/roundEnd.ts'
 import type { ServerMessage } from '../shared/types.ts'
 import { cleanName } from '../shared/words.ts'
@@ -21,6 +21,8 @@ export class Hub {
   private readonly socketState = new WeakMap<WebSocket, SocketState>()
   private readonly saveTimers = new Map<string, ReturnType<typeof setTimeout>>()
   private readonly tails = new Map<string, Promise<void>>()
+  /** Last fan-out for each room. Movement waits out MOVEMENT_BROADCAST_MS; urgent events do not. */
+  private readonly lastPush = new Map<string, number>()
   private store: RoomStore
   private readonly saveDelayMs: number
 
@@ -79,7 +81,11 @@ export class Hub {
   tick(now: number): void {
     for (const [code, room] of this.rooms) {
       room.tick(now)
-      if (room.consumeDirty()) this.push(room)
+      const last = this.lastPush.get(code) ?? 0
+      if (room.dirty && (room.urgent || now - last >= MOVEMENT_BROADCAST_MS)) {
+        room.consumeDirty()
+        this.push(room, now)
+      }
       if (room.dismissed) {
         this.dismiss(room, 'The host closed the lobby.')
         continue
@@ -237,8 +243,8 @@ export class Hub {
     this.push(room)
   }
 
-  private push(room: Room): void {
-    const now = Date.now()
+  private push(room: Room, now = Date.now()): void {
+    this.lastPush.set(room.code, now)
     for (const [playerId, socket] of this.sockets) {
       if (this.playerRoom.get(playerId) !== room.code) continue
       if (!room.has(playerId)) continue
@@ -250,7 +256,8 @@ export class Hub {
   private queueSave(room: Room): void {
     if (room.dismissed) return
     const code = room.code
-    this.cancelSave(code)
+    // A round that keeps moving must still save. Resetting this timer on every push never fires.
+    if (this.saveTimers.has(code)) return
     const timer = setTimeout(() => {
       this.saveTimers.delete(code)
       const current = this.rooms.get(code)
@@ -285,6 +292,7 @@ export class Hub {
   private dismiss(room: Room, message: string): void {
     const code = room.code
     this.cancelSave(code)
+    this.lastPush.delete(code)
     this.rooms.delete(code)
     this.enqueue(code, async () => {
       try {

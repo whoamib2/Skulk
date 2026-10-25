@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { destination, distanceMeters } from '../shared/geo.ts'
-import { PRO_PLAYER_MESSAGE, PRO_SETTINGS_MESSAGE } from '../shared/pro.ts'
+import { PRO_PLAYER_CAP, PRO_PLAYER_MESSAGE, PRO_SETTINGS_MESSAGE } from '../shared/pro.ts'
 import { OPENING_PING_DELAY_MS } from '../shared/rules.ts'
 import { Room } from './room.ts'
 
@@ -300,14 +300,15 @@ describe('Skulk Pro on a room', () => {
     expect(room.addBot(HOST, 9).error).toBe(PRO_PLAYER_MESSAGE)
   })
 
-  it('lets a Pro host resize the circle and fill 20 seats', () => {
+  it('lets a Pro host resize the circle and fill 30 seats', () => {
     const room = new Room({ code: 'ABC234', hostId: HOST, hostName: 'Ada', now: 0, hostPro: true })
     expect(room.updateSettings(HOST, { zoneRadiusM: 3000, durationSec: 3 * 3600, shrinkEnabled: true, pingIntervalSec: 20 }).ok).toBe(true)
     expect(room.settings.zoneRadiusM).toBe(3000)
-    for (let index = 0; index < 19; index += 1) {
+    for (let index = 0; index < PRO_PLAYER_CAP - 1; index += 1) {
       expect(room.addPlayer(`player-${index}`, `Name${index}`, index + 1).ok).toBe(true)
     }
-    expect(room.addPlayer('player-extra', 'Gus', 30).error).toBe('This round is full.')
+    expect(room.view(HOST, 40).roster).toHaveLength(PRO_PLAYER_CAP)
+    expect(room.addPlayer('player-extra', 'Gus', 40).error).toBe('This round is full.')
   })
 
   it('does not limit a practice round', () => {
