@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_SERVER_URL,
@@ -7,12 +8,19 @@ import {
   publicJoinUrl,
   resolveWsUrl,
   RECONNECT_MS,
+  HEALTH_ATTEMPT_MS,
+  HEALTH_BACKOFF_MS,
   SERVER_WAKE_MS,
+  WAKE_FAILED_MESSAGE,
+  WAKE_MESSAGE,
+  WAKE_PATIENCE_MS,
+  WAKE_STILL_MESSAGE,
   connectBudgetMs,
   serverUrlProblem,
   socketRetryDelayMs,
   stillWithinBudget,
   stillWithinWake,
+  wakeStatusMessage,
 } from './serverUrl.ts'
 
 describe('resolveWsUrl', () => {
@@ -69,19 +77,39 @@ describe('privacyPageUrl', () => {
 })
 
 describe('server wake', () => {
-  it('retries for about 90 seconds and then stops', () => {
-    expect(SERVER_WAKE_MS).toBe(90_000)
+  it('keeps trying a cold server for about 3 minutes', () => {
+    expect(SERVER_WAKE_MS).toBe(3 * 60 * 1000)
+    expect(HEALTH_ATTEMPT_MS).toBe(8_000)
+    expect(HEALTH_BACKOFF_MS).toBeGreaterThanOrEqual(2_000)
+    expect(HEALTH_BACKOFF_MS).toBeLessThanOrEqual(5_000)
+    expect(WAKE_PATIENCE_MS).toBe(90_000)
     expect(RECONNECT_MS).toBe(5 * 60 * 1000)
     expect(connectBudgetMs(false)).toBe(SERVER_WAKE_MS)
     expect(connectBudgetMs(true)).toBe(RECONNECT_MS)
-    expect(stillWithinWake(1_000, 90_999)).toBe(true)
-    expect(stillWithinWake(1_000, 91_000)).toBe(false)
+    expect(stillWithinWake(1_000, 1_000 + SERVER_WAKE_MS - 1)).toBe(true)
+    expect(stillWithinWake(1_000, 1_000 + SERVER_WAKE_MS)).toBe(false)
     expect(stillWithinBudget(1_000, 1_000 + RECONNECT_MS - 1, RECONNECT_MS)).toBe(true)
     expect(stillWithinBudget(1_000, 1_000 + RECONNECT_MS, RECONNECT_MS)).toBe(false)
+    expect(wakeStatusMessage(0)).toBe(WAKE_MESSAGE)
+    expect(wakeStatusMessage(WAKE_PATIENCE_MS - 1)).toBe(WAKE_MESSAGE)
+    expect(wakeStatusMessage(WAKE_PATIENCE_MS)).toBe(WAKE_STILL_MESSAGE)
+    expect(WAKE_FAILED_MESSAGE).toMatch(/didn’t wake up/)
     expect(socketRetryDelayMs(0)).toBe(400)
     expect(socketRetryDelayMs(1)).toBe(800)
     expect(socketRetryDelayMs(3)).toBe(3200)
     expect(socketRetryDelayMs(4)).toBe(4000)
     expect(socketRetryDelayMs(20)).toBe(4000)
+    const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8')
+    const game = readFileSync(new URL('../src/lib/useGame.ts', import.meta.url), 'utf8')
+    const health = readFileSync(new URL('../src/lib/health.ts', import.meta.url), 'utf8')
+    expect(app).toContain('data-screen="waking"')
+    expect(app).toContain('data-screen="wake-failed"')
+    expect(app).toContain('warmGameServer')
+    expect(app).toContain('Try again')
+    expect(app).toContain('>Cancel<')
+    expect(game).toContain('pingHealth')
+    expect(game).toContain('WAKE_FAILED_MESSAGE')
+    expect(health).toContain("mode: 'no-cors'")
+    expect(health).toContain('HEALTH_ATTEMPT_MS')
   })
 })

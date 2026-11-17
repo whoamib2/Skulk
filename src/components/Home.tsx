@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { ChartColumn, Settings } from 'lucide-react'
 import { openInAppIntent } from '@shared/appLink'
 import { DEFAULT_SERVER_URL, privacyPageUrl, serverUrlProblem } from '@shared/serverUrl'
@@ -44,8 +44,10 @@ export function Home({
   const [name, setName] = useState(loadName())
   const [code, setCode] = useState(prefillCode)
   const [localError, setLocalError] = useState<string | null>(null)
+  const sending = useRef(false)
 
   function submit() {
+    if (busy || sending.current) return
     const cleaned = cleanName(name)
     if (!cleaned) {
       setLocalError('Use 2–16 letters, numbers, or spaces.')
@@ -65,9 +67,11 @@ export function Home({
         setLocalError('Enter the round code.')
         return
       }
+      sending.current = true
       onJoin(cleaned, normalized)
       return
     }
+    sending.current = true
     onCreate(cleaned, sheet === 'practice')
   }
 

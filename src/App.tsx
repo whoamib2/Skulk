@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
+import { App as NativeApp } from '@capacitor/app'
+import { Loader2 } from 'lucide-react'
 import { joinCodeFromUrl } from '@shared/appLink'
+import { WAKE_PATIENCE_MS, wakeStatusMessage } from '@shared/serverUrl'
 import { Wordmark } from '@/components/Wordmark'
 import { Button } from '@/components/ui/button'
 import { GameOver } from '@/components/GameOver'
@@ -11,6 +14,7 @@ import { isNativeApp } from '@/lib/native'
 import { hydrateDeviceStore } from '@/lib/deviceStore'
 import { bootPro } from '@/lib/proStore'
 import { recordFinishedRound } from '@/lib/recordRound'
+import { warmGameServer } from '@/lib/health'
 import { loadServer, loadSim, saveServer, saveSim } from '@/lib/session'
 import { useGame } from '@/lib/useGame'
 
@@ -36,6 +40,29 @@ export default function App() {
   useEffect(() => {
     void hydrateDeviceStore()
     void bootPro()
+  }, [])
+
+  useEffect(() => {
+    warmGameServer()
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') warmGameServer()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    let nativeListener: { remove: () => Promise<void> } | null = null
+    let dropped = false
+    if (isNativeApp()) {
+      void NativeApp.addListener('appStateChange', ({ isActive }) => {
+        if (isActive) warmGameServer()
+      }).then((handle) => {
+        if (dropped) void handle.remove()
+        else nativeListener = handle
+      })
+    }
+    return () => {
+      dropped = true
+      document.removeEventListener('visibilitychange', onVisible)
+      void nativeListener?.remove()
+    }
   }, [])
 
   useEffect(() => {
@@ -106,8 +133,9 @@ export default function App() {
       <main className="mx-auto flex h-dvh w-full max-w-[480px] flex-col overflow-hidden bg-ink lg:h-[min(920px,calc(100dvh-3rem))] lg:rounded-[28px] lg:border lg:border-line">
         {view && !game.restarted && !game.connected && (
           <div className="flex items-center justify-center gap-3 bg-glow px-3 py-1 text-center text-xs text-ink">
-            <span>Reconnecting…</span>
-            <button type="button" className="font-medium underline" onClick={game.cancelConnect}>Back to start</button>
+            <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+            <span>{now - (game.connectStartedAt ?? now) >= WAKE_PATIENCE_MS ? 'Still waking up, hang on…' : 'Reconnecting…'}</span>
+            <button type="button" className="font-medium underline" onClick={game.cancelConnect}>Cancel</button>
           </div>
         )}
         {view && !game.restarted && game.error && (
@@ -126,14 +154,24 @@ export default function App() {
           <div className="grid h-full place-items-center px-6 text-center">
             <Wordmark className="mx-auto h-16 w-auto" />
           </div>
-        ) : !view && game.status === 'connecting' ? (
-          <div className="grid h-full place-items-center px-6 text-center">
+        ) : !view && game.wakeFailed ? (
+          <div data-screen="wake-failed" className="grid h-full place-items-center px-6 text-center">
             <div className="w-full max-w-xs">
               <Wordmark className="mx-auto h-16 w-auto" />
-              <p className="mt-4 text-sm text-foam">{game.resuming ? 'Reconnecting…' : 'Waking the server…'}</p>
+              <h2 className="font-display mt-4 text-2xl leading-tight text-foam">Server still asleep</h2>
+              <p className="mt-3 text-sm text-mist">{game.error}</p>
+              <Button className="mt-6" size="lg" onClick={game.retryWake}>Try again</Button>
+              <Button className="mt-3" variant="secondary" size="lg" onClick={game.dismissWake}>Back to start</Button>
+            </div>
+          </div>
+        ) : !view && game.status === 'connecting' ? (
+          <div data-screen="waking" className="grid h-full place-items-center px-6 text-center" aria-busy="true">
+            <div className="w-full max-w-xs">
+              <Wordmark className="mx-auto h-16 w-auto" />
+              <Loader2 className="mx-auto mt-6 size-8 animate-spin text-foam" aria-hidden="true" />
+              <p className="mt-4 text-sm text-foam" role="status">{wakeStatusMessage(now - (game.connectStartedAt ?? now))}</p>
               {game.resuming && <p className="mt-1 text-sm text-mist">Rejoining your round.</p>}
-              <p className="mt-2 text-sm text-mist">{game.resuming ? 'This can take a few minutes.' : 'This can take a minute.'}</p>
-              <Button className="mt-6" variant="secondary" size="lg" onClick={game.cancelConnect}>Back to start</Button>
+              <Button className="mt-6" variant="secondary" size="lg" onClick={game.cancelConnect}>Cancel</Button>
             </div>
           </div>
         ) : !view ? (

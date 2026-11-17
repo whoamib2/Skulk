@@ -1,8 +1,25 @@
 /** Public game server. The home field starts here, and players can change it. */
 export const DEFAULT_SERVER_URL = 'https://skulk.onrender.com'
 
-/** How long to keep trying a cold server before giving up. Render’s free plan can take about a minute to wake. */
-export const SERVER_WAKE_MS = 90_000
+/** How long to keep trying a cold server before giving up. A free Render instance can take a couple of minutes. */
+export const SERVER_WAKE_MS = 3 * 60 * 1000
+
+/** One /health try. Short enough that a hung socket does not eat the whole wait. */
+export const HEALTH_ATTEMPT_MS = 8_000
+
+/** Pause between /health tries, so a cold server is not hammered. */
+export const HEALTH_BACKOFF_MS = 3_000
+
+/** When the waking screen switches from the first message to the longer one. */
+export const WAKE_PATIENCE_MS = 90_000
+
+export const WAKE_MESSAGE = 'Waking the game server… this can take up to a minute'
+export const WAKE_STILL_MESSAGE = 'Still waking up, hang on…'
+export const WAKE_FAILED_MESSAGE = 'The game server didn’t wake up. It can take a minute after it’s been asleep.'
+
+export function wakeStatusMessage(elapsedMs: number): string {
+  return elapsedMs >= WAKE_PATIENCE_MS ? WAKE_STILL_MESSAGE : WAKE_MESSAGE
+}
 
 /** How long to keep retrying after a live round drops. A free-plan deploy often takes a few minutes. */
 export const RECONNECT_MS = 5 * 60 * 1000

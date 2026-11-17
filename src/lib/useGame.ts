@@ -4,7 +4,8 @@ import { normalizeView } from '@shared/view'
 import { joinCodeFromUrl, shouldResumeSavedRound } from '@shared/appLink'
 import { isProLimitMessage } from '@shared/pro'
 import { isRoundLostMessage } from '@shared/roundEnd'
-import { connectBudgetMs, healthUrlFor, resolveWsUrl, serverUrlProblem, socketRetryDelayMs, stillWithinBudget } from '@shared/serverUrl'
+import { connectBudgetMs, HEALTH_BACKOFF_MS, healthUrlFor, resolveWsUrl, serverUrlProblem, socketRetryDelayMs, stillWithinBudget, WAKE_FAILED_MESSAGE } from '@shared/serverUrl'
+import { pingHealth } from '@/lib/health'
 import { MOVEMENT_BROADCAST_MS } from '@shared/rules'
 import { readLaunchUrl } from '@/lib/appLinks'
 import { LocalTable } from '@/lib/localTable'
@@ -24,6 +25,8 @@ export function useGame() {
   const [resuming, setResuming] = useState(() => shouldResumeSavedRound(location.href, loadCode(), loadName()) && Boolean(resolveWsUrl(loadServer(), isNativeApp(), location.origin)))
   const [restarted, setRestarted] = useState(false)
   const [proLimit, setProLimit] = useState<string | null>(null)
+  const [wakeFailed, setWakeFailed] = useState(false)
+  const [connectStartedAt, setConnectStartedAt] = useState<number | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const acceptedRef = useRef(false)
   const localRef = useRef<LocalTable | null>(null)
@@ -42,6 +45,9 @@ export function useGame() {
   const lastLocationSent = useRef(0)
   const connectRef = useRef<(intent: Intent, name: string) => void>(() => {})
   const stopRef = useRef<(message: string | null, clearSession: boolean) => void>(() => {})
+  const connectingRef = useRef(false)
+  const wakeAbort = useRef<AbortController | null>(null)
+  const lastIntent = useRef<{ intent: Intent; name: string } | null>(null)
 
   useEffect(() => {
     viewRef.current = view
@@ -121,6 +127,8 @@ export function useGame() {
 
   useEffect(() => {
     function clearTimers() {
+      wakeAbort.current?.abort()
+      wakeAbort.current = null
       if (wakeTimer.current != null) {
         window.clearTimeout(wakeTimer.current)
         wakeTimer.current = null
@@ -141,7 +149,7 @@ export function useGame() {
       localRef.current = null
     }
 
-    function stopToHome(message: string | null, clearSession: boolean) {
+    function stopToHome(message: string | null, clearSession: boolean, failed = false) {
       clearTimers()
       gen.current += 1
       closed.current = true
@@ -149,6 +157,7 @@ export function useGame() {
       modeRef.current = null
       urlRef.current = null
       acceptedRef.current = false
+      connectingRef.current = false
       wsRef.current?.close()
       wsRef.current = null
       stopLocal()
@@ -157,8 +166,10 @@ export function useGame() {
       setView(null)
       setConnected(false)
       setStatus('idle')
+      setConnectStartedAt(null)
       setResuming(false)
       setRestarted(false)
+      setWakeFailed(failed)
       setError(message)
     }
 
@@ -169,11 +180,11 @@ export function useGame() {
       const code = loadCode()
       const message = resumed
         ? (code
-          ? `Couldn’t rejoin ${code}. That round may have ended, or the server didn’t wake up.`
-          : 'Couldn’t rejoin that round. The server didn’t wake up.')
-        : 'The server didn’t wake up. Check the game server and try again.'
+          ? `Couldn’t rejoin ${code}. The game server didn’t wake up, or that round has ended.`
+          : 'Couldn’t rejoin that round. The game server didn’t wake up.')
+        : WAKE_FAILED_MESSAGE
       // Keep the saved code. A deploy can outlast this wait, and the next open should resume.
-      stopToHome(message, false)
+      stopToHome(message, false, true)
     }
 
     function rejoining(): boolean {
@@ -198,17 +209,17 @@ export function useGame() {
       }, remaining)
     }
 
-    function scheduleRetry(my: number) {
+    function scheduleRetry(my: number, wait?: number) {
       if (closed.current || !intentRef.current) return
       if (!withinBudget()) {
         giveUp()
         return
       }
-      const delay = socketRetryDelayMs(retry.current)
-      retry.current += 1
+      const delay = wait ?? socketRetryDelayMs(retry.current)
+      if (wait == null) retry.current += 1
       retryTimer.current = window.setTimeout(() => {
         retryTimer.current = null
-        if (gen.current === my) open()
+        if (gen.current === my) void open()
       }, delay)
     }
 
@@ -228,7 +239,7 @@ export function useGame() {
       setRestarted(true)
     }
 
-    function open() {
+    async function open() {
       const my = ++gen.current
       wsRef.current?.close()
       stopLocal()
@@ -241,7 +252,22 @@ export function useGame() {
       }
       modeRef.current = 'remote'
       const health = healthUrlFor(target)
-      if (health) void fetch(health, { cache: 'no-store', mode: 'no-cors' }).catch(() => {})
+      if (health) {
+        const ctrl = new AbortController()
+        wakeAbort.current = ctrl
+        const reached = await pingHealth(health, undefined, ctrl.signal)
+        if (wakeAbort.current === ctrl) wakeAbort.current = null
+        if (gen.current !== my || closed.current) return
+        if (!withinBudget()) {
+          giveUp()
+          return
+        }
+        if (!reached) {
+          scheduleRetry(my, HEALTH_BACKOFF_MS)
+          return
+        }
+      }
+      if (gen.current !== my || closed.current) return
       let socket: WebSocket
       try {
         socket = new WebSocket(target)
@@ -304,11 +330,12 @@ export function useGame() {
           setStatus('connecting')
           if (wasLive) {
             connectStarted.current = Date.now()
+            setConnectStartedAt(connectStarted.current)
             retry.current = 0
             armDeadline()
           }
         }
-        scheduleRetry(my)
+        scheduleRetry(my, viewRef.current ? undefined : HEALTH_BACKOFF_MS)
       }
     }
 
@@ -316,8 +343,11 @@ export function useGame() {
       clearTimers()
       closed.current = false
       acceptedRef.current = false
+      connectingRef.current = true
       retry.current = 0
       connectStarted.current = Date.now()
+      setConnectStartedAt(connectStarted.current)
+      setWakeFailed(false)
       modeRef.current = 'remote'
       intentRef.current = intent
       urlRef.current = target
@@ -326,7 +356,7 @@ export function useGame() {
       setError(null)
       setConnected(false)
       armDeadline()
-      open()
+      void open()
     }
 
     function startLocal(name: string) {
@@ -336,6 +366,7 @@ export function useGame() {
       wsRef.current = null
       stopLocal()
       closed.current = false
+      connectingRef.current = false
       modeRef.current = 'local'
       intentRef.current = { kind: 'create', practice: true }
       clearCode()
@@ -363,6 +394,8 @@ export function useGame() {
         startLocal(name)
         return
       }
+      if (connectingRef.current) return
+      lastIntent.current = { intent, name }
       const native = isNativeApp()
       const problem = serverUrlProblem(loadServer(), native)
       const target = resolveWsUrl(loadServer(), native, location.origin)
@@ -432,11 +465,24 @@ export function useGame() {
     error,
     resuming,
     restarted,
+    wakeFailed,
+    connectStartedAt,
     proLimit,
     clearProLimit: () => setProLimit(null),
     dismissRestart: () => {
       setRestarted(false)
       stopRef.current(null, true)
+    },
+    retryWake: () => {
+      const pending = lastIntent.current
+      if (!pending) return
+      setWakeFailed(false)
+      connectRef.current(pending.intent, pending.name)
+    },
+    dismissWake: () => {
+      lastIntent.current = null
+      setWakeFailed(false)
+      stopRef.current(null, false)
     },
     send,
     leave,
